@@ -1,8 +1,8 @@
-#[allow(unused_must_use)];
+#[allow(unused_must_use)]
 
 extern crate extra;
+extern crate collections;
 
-use extra::url::{Url, query_to_str};
 use std::io::net::addrinfo::get_host_addresses;
 use std::io::net::ip::SocketAddr;
 use std::io::net::tcp::TcpStream;
@@ -10,12 +10,21 @@ use std::io::BufferedStream;
 use std::io;
 use std::io::IoResult;
 
+use std::fmt::{Show, Formatter, Result};
+
+// for to_ascii_lower, eq_ignore_ascii_case
 use std::ascii::StrAsciiExt;
+//use std::ascii::AsciiStr;
 use std::num::from_str_radix;
+
+use extra::url::{Url, query_to_str};
+
+use collections::HashMap;
+
+
 
 static USER_AGENT : &'static str = "Rust-http-helper/0.1dev";
 static HTTP_PORT : u16 = 80;
-static HTTP_VERSION_STR : &'static str = "HTTP/1.1";
 
 
 #[deriving(Show)]
@@ -60,25 +69,66 @@ pub enum HttpMethod {
     CONNECT,
 }
 
+#[allow(non_camel_case_types)]
+pub enum HttpVersion {
+    HTTP_1_1,
+    HTTP_1_0,
+}
+
+impl Show for HttpVersion {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        match *self {
+            HTTP_1_1 => f.buf.write(bytes!("HTTP/1.1")),
+            HTTP_1_0 => f.buf.write(bytes!("HTTP/1.0")),
+        }
+    }
+}
+
 // ==================== Request
-pub struct Request {
-    version: int,
-    headers: ~[(~str, ~str)],
+pub struct Request<'a> {
+    version: HttpVersion,
     uri: Url,
     method: HttpMethod,
+    headers: HashMap<~str, ~[~str]>,
+    content: Option<&'a Reader>
 
 }
 
-impl Request {
-    pub fn new_with_url(u: Url) -> Request {
-        Request { version: 11, headers: ~[],
-                  uri: u, method: GET}
+impl<'a> Request<'a> {
+    pub fn new_with_url(uri: Url) -> Request {
+        Request { version: HTTP_1_1, uri: uri,
+                  method: GET, headers: HashMap::new(), content: None}
     }
 }
 
 
+fn header_eq(a: &str, b: &str) -> bool {
+    a.eq_ignore_ascii_case(b)
+}
+
+fn to_header_case(key: &str) -> ~str {
+    let mut ret = ~"";
+    let mut flag_is_at_words_begin = true;
+    for c in key.as_bytes().iter() {
+        if flag_is_at_words_begin {
+            ret.push_char(c.to_ascii().to_upper().to_char());
+            flag_is_at_words_begin = false;
+        } else {
+            ret.push_char(c.to_ascii().to_lower().to_char());
+        }
+        if *c == '-' as u8 {
+            flag_is_at_words_begin = true;
+        }
+    }
+    ret
+}
+
+
 pub trait Opener {
-    fn open(&mut self, req: Request) -> Response;
+    fn request(&mut self, req: &mut Request) -> Option<Request> { None }
+    fn response(&mut self, req: Request, resp: Response) -> Option<Response> { None }
+    fn handle(&mut self, req: &mut Request) -> Option<Response> { None }
+
     fn handler_order() -> int { 100 }
 }
 
@@ -89,11 +139,35 @@ pub struct HTTPHandler {
 impl Opener for HTTPHandler {
     // TODO pre request: add ness header
     // TODO after request: error handling
-    fn open(&mut self, req: Request) -> Response {
+    fn request(&mut self, req: &mut Request) -> Option<Request> {
+        let uri = req.uri.clone();
+        // let mut host = uri.host.clone();
+        // if !uri.port.is_none() { host.push_str(format!(":{}", uri.port.unwrap())) }
+        let host = uri.port.map_or(req.uri.host.clone(),
+                                   |p| format!("{}:{}", req.uri.host, p));
+        req.headers.find_or_insert(~"Host", ~[host]);
+
+        req.headers.find_or_insert(~"User-Agent", ~[USER_AGENT.into_owned()]);
+
+        // not support x-gzip or x-deflate.
+        req.headers.find_or_insert(~"Accept-Encoding", ~[~"identity"]);
+
+        req.headers.find_or_insert(~"Connection", ~[~"close"]);
+
+        for (key, values) in req.headers.iter() {
+            println!("dump HEADER {:?} => {:?}", key, values);
+        }
+        None
+    }
+
+    fn handle(&mut self, req: &mut Request) -> Option<Response> {
+        // DEBUG
+        self.request(req);
+
         let uri = req.uri.clone();
 
         let ips = get_host_addresses(uri.host).unwrap();
-        let port = uri.port.clone().and_then(|p| from_str::<u16>(p)).unwrap_or(HTTP_PORT);
+        let port = uri.port.clone().and_then(|p| from_str(p)).unwrap_or(HTTP_PORT);
 
         let addr = SocketAddr { ip: ips.head().unwrap().clone(), port: port };
 
@@ -101,8 +175,8 @@ impl Opener for HTTPHandler {
         let read_stream = stream.clone();
         let mut stream = BufferedStream::new(stream);
 
+        // METHOD /path HTTP/v.v
         let request_method = req.method.to_str();
-
         stream.write_str(request_method);
         stream.write_str(" ");
         stream.write_str(uri.path);
@@ -113,25 +187,26 @@ impl Opener for HTTPHandler {
         }
 
         stream.write_str(" ");
-        stream.write_str(HTTP_VERSION_STR);
+        stream.write_str(req.version.to_str());
         stream.write_char('\n');
-        stream.write_str("Accept-Encoding: identity");
-        stream.write(bytes!("\n"));
 
-        stream.write_str("Host: ");
-        stream.write_str(uri.host);
-        stream.write(bytes!("\n"));
+        // headers
+        for (k, vs) in req.headers.iter() {
+            stream.write_str(*k);
+            stream.write(bytes!(": "));
+            for (i, v) in vs.iter().enumerate() {
+                stream.write_str(*v);
+                // FIXME: multi-value header line
+                if i > 0 { stream.write(bytes!("; ")); }
+            }
+            stream.write(bytes!("\n"));
+        }
 
-        stream.write_str("Connection: close");
         stream.write(bytes!("\n"));
-        stream.write_str("User-Agent: ");
-        stream.write_str(USER_AGENT);
-
-        stream.write(bytes!("\n\n"));
         stream.flush();
 
 
-        Response::new_with_stream(&read_stream)
+        Some(Response::new_with_stream(&read_stream))
     }
 }
 
@@ -141,7 +216,8 @@ pub struct Response<'a> {
     status: int,
     reason: ~str,
 
-    headers: ~[(~str, ~str)],
+    //headers: ~[(~str, ~str)],
+    headers: HashMap<~str, ~[~str]>,
 
     priv chunked: bool,
     priv chunked_left: Option<uint>,
@@ -184,17 +260,17 @@ impl<'a> Response<'a> {
                 fail!("malformated status line")
         };
 
-        let mut headers : ~[(~str,~str)] = ~[];
+        let mut headers = HashMap::new();
         loop {
             let line = stream.read_line().unwrap();
             let segs = line.splitn(':', 1).collect::<~[&str]>();
             if segs.len() == 2 {
                 let k = segs[0];
                 let v = segs[1].trim();
-                println!("HEADER {:?} => |{:?}|", k, v);
-                headers.push((k.into_owned(), v.into_owned()));
+                // println!("HEADER {:?} => |{:?}|", k, v);
+                headers.insert_or_update_with(k.into_owned(), ~[v.into_owned()],
+                                              |_k, ov| ov.push(v.into_owned()));
             } else {
-                println!("error spliting line {:?}", line);
                 if [~"\r\n", ~"\n", ~""].contains(&line) {
                     break;
                 }
@@ -203,9 +279,9 @@ impl<'a> Response<'a> {
         }
 
         let mut chunked = false;
-        for &(ref k, ref v) in headers.iter() {
-            if k.to_ascii_lower() == ~"transfer-encoding" {
-                if v.to_ascii_lower() == ~"chunked" {
+        for (k, v) in headers.iter() {
+            if k.eq_ignore_ascii_case("transfer-encoding") {
+                if v.head().unwrap().eq_ignore_ascii_case("chunked") {
                     chunked = true;
                 }
                 break;
@@ -214,14 +290,11 @@ impl<'a> Response<'a> {
 
         let mut length_opt = None;
         if !chunked {
-            for &(ref k, ref v) in headers.iter() {
-                if k.to_ascii_lower() == ~"content-length" {
-                    length_opt = from_str::<uint>(*v);
-                    break;
-                }
+            length_opt = match headers.find(&to_header_case("content-length")) {
+                None => None,
+                Some(v) => from_str::<uint>(*v.head().unwrap())
             }
         }
-
         println!("debug chunked={} length={}", chunked, length_opt);
 
         Response { version: version, status: status, reason: reason.into_owned(),
@@ -274,12 +347,13 @@ fn main() {
     let u = ~"http://flash.weather.com.cn/sk2/101010100.xml";
     //let u = ~"http://www.google.com/";
     //let u = ~"http://fledna.duapp.com/ip";
+    //let u = ~"http://127.0.0.1:8888/fuckyou_self_and";
+
     let url : Url = from_str(u).unwrap();
 
-
-    let req = Request::new_with_url(url.clone());
+    let mut req = Request::new_with_url(url.clone());
     let mut h = HTTPHandler { debug: true };
-    let mut resp = h.open(req);
+    let mut resp = h.handle(&mut req).unwrap();
 
     let mut s = ~"";
 
@@ -292,11 +366,18 @@ fn main() {
             ()
     }
 
-    println!("\n=== result ===");
+    println!("\n======================= result =======================");
     println!("read bytes=> {}", s.len());
-    println!("headers => {:?}", resp.headers);
+    for (k, vs) in resp.headers.iter() {
+        println!("H {:?} => {:?}", k, vs)
+    }
 
 
+    println!("****************************************");
+    println!("headers eq {:?}", header_eq("Accept-Encoding", "accept-encoding"));
+    println!("t: {:?}", to_header_case("X-ForWard-For"));
+    println!("t: {:?}", to_header_case("accept-encoding"));
+    println!("t: {:?}", to_header_case("keep-alive"));
 }
 
 /*
