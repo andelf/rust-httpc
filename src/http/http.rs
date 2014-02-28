@@ -249,7 +249,6 @@ impl<'a> Reader for Response<'a> {
     fn read(&mut self, buf: &mut [u8]) -> IoResult<uint> {
         let mut ret : uint = 0;
         if self.chunked {
-            //loop {
             if self.chunked_left.is_none() {
                 let chunked_left = self._read_next_chunk_size();
                 println!("1. chunked_left = {}", chunked_left);
@@ -265,7 +264,6 @@ impl<'a> Reader for Response<'a> {
             }
             Ok(ret)
         } else {
-            println!("!!!!!");
             self.sock.read(buf)
         }
     }
@@ -273,62 +271,18 @@ impl<'a> Reader for Response<'a> {
 
 
 fn main() {
-    //let u = ~"http://m.baidu.com/ssid=0/from=0/bd_page_type=1/uid=0/baiduid=CD9624414436F66897951C8BBAF88CA6/s?word=fk&uc_param_str=upssntdnvelami&sa=ib&st_1=111041&st_2=102041&pu=sz%40224_220%2Cta%40middle___3_537&idx=20000&tn_1=middle&tn_2=middle&ct_1=%E6%90%9C%E7%BD%91%E9%A1%B5";
-    // let u = ~"http://flash.weather.com.cn/sk2/101010100.xml";
+    let u = ~"http://flash.weather.com.cn/sk2/101010100.xml";
     //let u = ~"http://www.google.com/";
-    let u = ~"http://fledna.duapp.com/ip";
+    //let u = ~"http://fledna.duapp.com/ip";
     let url : Url = from_str(u).unwrap();
 
 
     let req = Request::new_with_url(url.clone());
     let mut h = HTTPHandler { debug: true };
-    let resp = h.open(req);
-
-
-    println!("{}", url.to_str());
-    println!("scheme = {}  host = {} port = {}", url.scheme, url.host, url.port);
-    println!("path = |{}| query = {}", url.path, url.query);
-    let addrs = get_host_addresses(url.host).unwrap();
-    let addr = SocketAddr { ip: addrs.head().unwrap().clone(),
-                            port: HTTP_PORT };
-    let stream = TcpStream::connect(addr).unwrap();
-    let read_stream = stream.clone();
-    let mut stream = BufferedStream::new(stream);
-
-    let request_method = ~"GET";
-
-    stream.write_str(request_method);
-    stream.write_str(" ");
-    stream.write_str(url.path);
-
-    if !url.query.is_empty() {
-        stream.write_char('?');
-        stream.write_str(query_to_str(&url.query));
-    }
-
-    stream.write_str(" ");
-    stream.write_str(HTTP_VERSION_STR);
-    stream.write_char('\n');
-    stream.write_str("Accept-Encoding: identity");
-    stream.write(bytes!("\n"));
-
-    stream.write_str("Host: ");
-    stream.write_str(url.host);
-    stream.write(bytes!("\n"));
-
-    stream.write_str("Connection: close");
-    stream.write(bytes!("\n"));
-    stream.write_str("User-Agent: ");
-    stream.write_str(USER_AGENT);
-
-    stream.write(bytes!("\n\n"));
-    stream.flush();
-
-
-    let mut resp = Response::new_with_stream(&read_stream);
+    let mut resp = h.open(req);
 
     let mut s = ~"";
-    //let response = stream.read_to_str();
+
     match resp.read_to_str() {
         Ok(content) => {
             s = s + content;
@@ -338,8 +292,9 @@ fn main() {
             ()
     }
 
-    println!("\nhello world!");
+    println!("\n=== result ===");
     println!("read bytes=> {}", s.len());
+    println!("headers => {:?}", resp.headers);
 
 
 }
@@ -355,48 +310,3 @@ Accept-Language: en-US,en;q=0.8
 RA-Ver: 1.7.2
 RA-Sid: 0E8202A9-20131112-145528-03b634-2d1e16
 */
-
-
-
-
-    // let line = stream.read_line().unwrap(); // status line
-    // match line.split(' ').collect::<~[&str]>() {
-    //     [version, status, reason] => {
-    //         println!("v = {} st = {} reason = {}",
-    //                  version, status, reason);
-    //         if !version.starts_with("HTTP/") {
-    //             println!("bad status line!");
-    //         }
-    //         let status = from_str::<int>(status).unwrap();
-    //         println!("status code = {}", status);
-
-    //         if status < 100 || status > 999 {
-    //             println!("bad status code");
-    //         }
-
-    //     }
-    //     _ =>
-    //         println!("match failed")
-    // }
-
-    // let mut headers : ~[(~str,~str)] = ~[];
-    // loop {
-    //     let line = stream.read_line().unwrap();
-    //     match line.splitn(':', 1).collect::<~[&str]>() {
-    //         [k, v] => {
-    //             println!("HEADER {:?} => |{:?}|", k, v.trim());
-    //             headers.push((k.into_owned(), v.trim().into_owned()));
-    //         }
-    //         _ => {
-    //             println!("error spliting line {:?}", line);
-    //             if [~"\r\n", ~"\n", ~""].contains(&line) {
-    //                 break;
-    //             }
-    //             fail!("malformatted line");
-    //         }
-    //     }
-    //     //break;
-    // }
-    // println!("header => {:?}", headers);
-
-    //println!("addr = {}", addr.to_str());
