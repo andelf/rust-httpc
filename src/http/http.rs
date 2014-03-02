@@ -101,18 +101,19 @@ impl<'a> Request<'a> {
         if uri.path == ~"" {
             uri.path = ~"/";
         }
-        Request { version: HTTP_1_1, uri: uri,
-                  method: GET, headers: HashMap::new(), content: None}
+        Request { version: HTTP_1_1, uri: uri, method: GET,
+                  headers: HashMap::new(), content: None}
+    }
+    pub fn add_header(&mut self, key: &str, value: &str) {
+        self.headers.insert_or_update_with(to_header_case(key),
+                                           ~[value.into_owned()],
+                                           |_k,v| v[0] = value.into_owned()) ;
     }
 }
 
-
-
-
-
-fn header_eq(a: &str, b: &str) -> bool {
-    a.eq_ignore_ascii_case(b)
-}
+// fn header_eq(a: &str, b: &str) -> bool {
+//     a.eq_ignore_ascii_case(b)
+// }
 
 fn to_header_case(key: &str) -> ~str {
     let mut ret = ~"";
@@ -131,10 +132,7 @@ fn to_header_case(key: &str) -> ~str {
     ret
 }
 
-
-
-
-
+#[allow(unused_variable)]
 pub trait Handler {
     fn request(&mut self, req: &mut Request) -> Option<Request> { None }
     fn response(&mut self, req: Request, resp: Response) -> Option<Response> { None }
@@ -143,10 +141,11 @@ pub trait Handler {
     fn handler_order() -> int { 100 }
 }
 
+
+
 pub struct HTTPHandler {
     debug: bool
 }
-
 
 #[allow(unused_must_use)]
 impl Handler for HTTPHandler {
@@ -324,7 +323,8 @@ impl<'a> Reader for Response<'a> {
                         Ok(n) => {
                             buf.move_from(tbuf, 0, n);
                             if left - n == 0 { // this chunk ends
-                                self.sock.read_bytes(2); // toss the CRLF at the end of the chunk
+                                // toss the CRLF at the end of the chunk
+                                assert!(self.sock.read_bytes(2).is_ok());
                                 self.chunked_left = None;
                             } else {
                                 self.chunked_left = Some(left - n);
@@ -338,7 +338,7 @@ impl<'a> Reader for Response<'a> {
                     let chunked_left = self._read_next_chunk_size();
                     println!("1. chunked_left = {}", chunked_left);
                     if chunked_left == 0 {
-                        Err(io::standard_error(io::EndOfFile));
+                        Err(io::standard_error(io::EndOfFile))
                     } else  {
                         self.chunked_left = Some(chunked_left);
                         Ok(0)
@@ -351,46 +351,7 @@ impl<'a> Reader for Response<'a> {
     }
 }
 
-//                         if n < chunked_left {
-//                             println!("n = {} chunked_left = {}", n, chunked_left);
-//                             fail!("NotImplementedYet: read byte less than wanted")
-//                         }
-//             if self.chunked_left.is_none() {
-//                         let chunked_left = self._read_next_chunk_size();
-//                 println!("1. chunked_left = {}", chunked_left);
-//                 if chunked_left == 0 {
-//                     return Err(io::standard_error(io::EndOfFile));
-//                 }
-//                 if chunked_left > buf.len() {
-//                     fail!("NotImplementedYet: buf < chunked_size");
-//                 }
-//                 //let mut tbuf : [u8, ..chunked_left];
-//                 let mut tbuf = vec::from_elem(chunked_left, 0u8);
-//                 match self.sock.read(tbuf) {
-//                     Ok(n) => {
-//                         if n != chunked_left {
-//                             println!("n = {} chunked_left = {}", n, chunked_left);
-//                             fail!("NotImplementedYet: read byte less than wanted")
-//                         }
-//                         buf.move_from(tbuf, 0, chunked_left);
-//                         //println!("1. bs size = {}", bs.len());
-//                         //let consumed = buf.move_from(bs, 0, chunked_left);
-//                         //let consumed = buf.move_from(bs, 0, chunked_left);
-//                         //if consumed < bs.len() {
-//                         //println!("1. buf size = {}", buf.len());
-//                         //println!("1. consumed = {}", consumed);
-//                     }
-//                     Err(_) => fail!("error read from sock")
-//                 };
-//                 ret += chunked_left;
-//                 self.sock.read_bytes(2); // toss the CRLF at the end of the chunk
-//             }
-//             Ok(ret)
-//         } else {
-//             self.sock.read(buf)
-//         }
-//     }
-// }
+
 
 
 fn main() {
@@ -454,14 +415,14 @@ fn test_yahoo_redirect_response() {
     let mut h = HTTPHandler { debug: true };
     let mut resp = h.handle(&mut req).unwrap();
 
-    let content = match resp.read_to_str() {
+    let content = match resp.read_to_end() {
         Ok(content) => {
             content
         }
         Err(_) =>
             ~""
     };
-
+    println!("content = {:}", content);
 }
 
 
