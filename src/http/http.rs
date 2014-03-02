@@ -1,7 +1,6 @@
-#[allow(unused_must_use)]
-
 extern crate extra;
 extern crate collections;
+
 
 use std::io::net::addrinfo::get_host_addresses;
 use std::io::net::ip::SocketAddr;
@@ -9,6 +8,8 @@ use std::io::net::tcp::TcpStream;
 use std::io::BufferedStream;
 use std::io;
 use std::io::IoResult;
+
+use std::vec;
 
 use std::fmt::{Show, Formatter, Result};
 
@@ -20,7 +21,6 @@ use std::num::from_str_radix;
 use extra::url::{Url, query_to_str};
 
 use collections::HashMap;
-
 
 
 static USER_AGENT : &'static str = "Rust-http-helper/0.1dev";
@@ -95,11 +95,19 @@ pub struct Request<'a> {
 }
 
 impl<'a> Request<'a> {
-    pub fn new_with_url(uri: Url) -> Request {
+    pub fn new_with_url(uri: &Url) -> Request {
+        // fix empty path
+        let mut uri = uri.clone();
+        if uri.path == ~"" {
+            uri.path = ~"/";
+        }
         Request { version: HTTP_1_1, uri: uri,
                   method: GET, headers: HashMap::new(), content: None}
     }
 }
+
+
+
 
 
 fn header_eq(a: &str, b: &str) -> bool {
@@ -124,7 +132,10 @@ fn to_header_case(key: &str) -> ~str {
 }
 
 
-pub trait Opener {
+
+
+
+pub trait Handler {
     fn request(&mut self, req: &mut Request) -> Option<Request> { None }
     fn response(&mut self, req: Request, resp: Response) -> Option<Response> { None }
     fn handle(&mut self, req: &mut Request) -> Option<Response> { None }
@@ -136,7 +147,9 @@ pub struct HTTPHandler {
     debug: bool
 }
 
-impl Opener for HTTPHandler {
+
+#[allow(unused_must_use)]
+impl Handler for HTTPHandler {
     // TODO pre request: add ness header
     // TODO after request: error handling
     fn request(&mut self, req: &mut Request) -> Option<Request> {
@@ -154,9 +167,9 @@ impl Opener for HTTPHandler {
 
         req.headers.find_or_insert(~"Connection", ~[~"close"]);
 
-        for (key, values) in req.headers.iter() {
-            println!("dump HEADER {:?} => {:?}", key, values);
-        }
+        // for (key, values) in req.headers.iter() {
+        //     println!("dump HEADER {:?} => {:?}", key, values);
+        // }
         None
     }
 
@@ -180,6 +193,7 @@ impl Opener for HTTPHandler {
         stream.write_str(request_method);
         stream.write_str(" ");
         stream.write_str(uri.path);
+        println!("uri.path => |{}|", uri.path);
 
         if !uri.query.is_empty() {
             stream.write_char('?');
@@ -205,25 +219,20 @@ impl Opener for HTTPHandler {
         stream.write(bytes!("\n"));
         stream.flush();
 
-
         Some(Response::new_with_stream(&read_stream))
     }
 }
 
 
 pub struct Response<'a> {
-    version: int,
+    version: HttpVersion,
     status: int,
     reason: ~str,
-
-    //headers: ~[(~str, ~str)],
     headers: HashMap<~str, ~[~str]>,
 
     priv chunked: bool,
     priv chunked_left: Option<uint>,
-
     priv length: Option<uint>,
-
     priv sock: BufferedStream<TcpStream>
 }
 
@@ -232,33 +241,18 @@ impl<'a> Response<'a> {
         let mut stream = BufferedStream::new(s.clone());
         //let mut stream = s;
         let line = stream.read_line().unwrap(); // status line
-        let segs = line.split(' ').collect::<~[&str]>();
-        let (version, status, reason) = if segs.len() == 3 {
-            let ver = segs[0];
-            let status = segs[1];
-            let reason = segs[2];
-
-            println!("v = {} st = {} reason = {}",
-                     ver, status, reason);
-            if !ver.starts_with("HTTP/") {
-                println!("bad status line!");
-            }
-            let version = match ver {
-                "HTTP/1.1" => 11,
-                "HTTP/1.0" => 10,
-                "HTTP/0.9" =>  9,
-                _          =>  9
-            };
-            let status = from_str::<int>(status).unwrap();
-            println!("status code = {}", status);
-
-            if status < 100 || status > 999 {
-                println!("bad status code");
-            }
-            (version, status, reason)
-        } else {
-                fail!("malformated status line")
+        let segs = line.splitn(' ', 2).collect::<~[&str]>();
+        println!("DEBUG header segs {:?}", segs);
+        let version = match segs[0] {
+            "HTTP/1.1"                  => HTTP_1_1,
+            "HTTP/1.0"                  => HTTP_1_0,
+            v if v.starts_with("HTTP/") => HTTP_1_0,
+            _                           => fail!("unsupported HTTP version")
         };
+        let status = from_str::<int>(segs[1]).unwrap();
+        let reason = segs[2].trim_right();
+
+        println!("HTTP version = {:?} status = {:?} reason = {:?}", version, status, reason);
 
         let mut headers = HashMap::new();
         loop {
@@ -295,7 +289,7 @@ impl<'a> Response<'a> {
                 Some(v) => from_str::<uint>(*v.head().unwrap())
             }
         }
-        println!("debug chunked={} length={}", chunked, length_opt);
+        println!("DEBUG chunked={} length={}", chunked, length_opt);
 
         Response { version: version, status: status, reason: reason.into_owned(),
                    headers: headers,
@@ -320,38 +314,106 @@ impl<'a> Response<'a> {
 
 impl<'a> Reader for Response<'a> {
     fn read(&mut self, buf: &mut [u8]) -> IoResult<uint> {
-        let mut ret : uint = 0;
-        if self.chunked {
-            if self.chunked_left.is_none() {
-                let chunked_left = self._read_next_chunk_size();
-                println!("1. chunked_left = {}", chunked_left);
-                if chunked_left == 0 {
-                    return Err(io::standard_error(io::EndOfFile));
+        // read 1 chunk or less
+        println!("DEBUG calls read()");
+        if self.chunked {       // TODO: handle Gzip
+            match self.chunked_left {
+                Some(left) if left > 0 => {
+                    let mut tbuf = vec::from_elem(left, 0u8);
+                    match self.sock.read(tbuf) {
+                        Ok(n) => {
+                            buf.move_from(tbuf, 0, n);
+                            if left - n == 0 { // this chunk ends
+                                self.sock.read_bytes(2); // toss the CRLF at the end of the chunk
+                                self.chunked_left = None;
+                            } else {
+                                self.chunked_left = Some(left - n);
+                            }
+                            Ok(n)
+                        }
+                        Err(e) => fail!("error read from sock: {}", e)
+                    }
                 }
-                match self.sock.read_bytes(chunked_left) {
-                    Ok(bs) => buf.move_from(bs, ret, ret + chunked_left),
-                    Err(_) => fail!("error read from sock")
-                };
-                ret += chunked_left;
-                self.sock.read_bytes(2); // toss the CRLF at the end of the chunk
+                _ => {          // left == 0 or left is None
+                    let chunked_left = self._read_next_chunk_size();
+                    println!("1. chunked_left = {}", chunked_left);
+                    if chunked_left == 0 {
+                        Err(io::standard_error(io::EndOfFile));
+                    } else  {
+                        self.chunked_left = Some(chunked_left);
+                        Ok(0)
+                    }
+                }
             }
-            Ok(ret)
         } else {
             self.sock.read(buf)
         }
     }
 }
 
+//                         if n < chunked_left {
+//                             println!("n = {} chunked_left = {}", n, chunked_left);
+//                             fail!("NotImplementedYet: read byte less than wanted")
+//                         }
+//             if self.chunked_left.is_none() {
+//                         let chunked_left = self._read_next_chunk_size();
+//                 println!("1. chunked_left = {}", chunked_left);
+//                 if chunked_left == 0 {
+//                     return Err(io::standard_error(io::EndOfFile));
+//                 }
+//                 if chunked_left > buf.len() {
+//                     fail!("NotImplementedYet: buf < chunked_size");
+//                 }
+//                 //let mut tbuf : [u8, ..chunked_left];
+//                 let mut tbuf = vec::from_elem(chunked_left, 0u8);
+//                 match self.sock.read(tbuf) {
+//                     Ok(n) => {
+//                         if n != chunked_left {
+//                             println!("n = {} chunked_left = {}", n, chunked_left);
+//                             fail!("NotImplementedYet: read byte less than wanted")
+//                         }
+//                         buf.move_from(tbuf, 0, chunked_left);
+//                         //println!("1. bs size = {}", bs.len());
+//                         //let consumed = buf.move_from(bs, 0, chunked_left);
+//                         //let consumed = buf.move_from(bs, 0, chunked_left);
+//                         //if consumed < bs.len() {
+//                         //println!("1. buf size = {}", buf.len());
+//                         //println!("1. consumed = {}", consumed);
+//                     }
+//                     Err(_) => fail!("error read from sock")
+//                 };
+//                 ret += chunked_left;
+//                 self.sock.read_bytes(2); // toss the CRLF at the end of the chunk
+//             }
+//             Ok(ret)
+//         } else {
+//             self.sock.read(buf)
+//         }
+//     }
+// }
+
 
 fn main() {
-    let u = ~"http://flash.weather.com.cn/sk2/101010100.xml";
+    //let u = ~"http://flash.weather.com.cn/sk2/101010100.xml";
     //let u = ~"http://www.google.com/";
     //let u = ~"http://fledna.duapp.com/ip";
     //let u = ~"http://127.0.0.1:8888/fuckyou_self_and";
+    //let u = ~"http://www.baidu.com";
+    //let u = ~"http://weibo.com";
+    //let u = ~"http://zx.bjmemc.com.cn/ashx/Data.ashx?Action=GetAQIClose1h";
+    //    let u = "http://www.yahoo.com.cn";
+    //let u = "http://sg.search.yahoo.com/";
+    //let u = "http://www.renren.com/";
+    let u = "http://www.baidu.com/#wd=http%201.1%20zlib%20uncompress&rsv_spt=1&issp=1&rsv_bp=0&ie=utf-8&tn=baiduhome_pg&rsv_sug3=1&rsv_sug4=17&rsv_sug2=0&inputT=6";
 
     let url : Url = from_str(u).unwrap();
 
-    let mut req = Request::new_with_url(url.clone());
+    let mut req = Request::new_with_url(&url);
+    // req.headers.find_or_insert(~"Accept-Encoding", ~[~"gzip,deflate,sdch"]);
+    // req.headers.find_or_insert(~"Accept", ~[~"*/*"]);
+    // req.headers.find_or_insert(~"User-Agent", ~[~"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/34.0.1847.11 Safari/537.36"]);
+
+
     let mut h = HTTPHandler { debug: true };
     let mut resp = h.handle(&mut req).unwrap();
 
@@ -360,25 +422,79 @@ fn main() {
     match resp.read_to_str() {
         Ok(content) => {
             s = s + content;
-            print!("| {}", content);
+            println!("| {}", content);
         }
-        Err(_) =>
-            ()
+        Err(e) => {
+            println!("! read error: {:?}", e);
+        }
     }
+    println!("DEBUG read bytes=> {}", s.len());
+    dump_result(&req, &resp);
+}
 
-    println!("\n======================= result =======================");
-    println!("read bytes=> {}", s.len());
-    for (k, vs) in resp.headers.iter() {
+
+fn dump_result(req: &Request, resp: &Response) {
+    println!("\n======================= request result =======================");
+    for (k, vs) in req.headers.iter() {
         println!("H {:?} => {:?}", k, vs)
     }
 
-
-    println!("****************************************");
-    println!("headers eq {:?}", header_eq("Accept-Encoding", "accept-encoding"));
-    println!("t: {:?}", to_header_case("X-ForWard-For"));
-    println!("t: {:?}", to_header_case("accept-encoding"));
-    println!("t: {:?}", to_header_case("keep-alive"));
+    println!("======================= response result =======================");
+    for (k, vs) in resp.headers.iter() {
+        println!("H {:?} => {:?}", k, vs)
+    }
 }
+
+#[test]
+fn test_yahoo_redirect_response() {
+    let url = from_str("http://www.yahoo.com.cn").unwrap();
+    let mut req = Request::new_with_url(&url);
+    req.headers.find_or_insert(~"Accept-Encoding", ~[~"gzip,deflate,sdch"]);
+
+    let mut h = HTTPHandler { debug: true };
+    let mut resp = h.handle(&mut req).unwrap();
+
+    let content = match resp.read_to_str() {
+        Ok(content) => {
+            content
+        }
+        Err(_) =>
+            ~""
+    };
+
+}
+
+
+#[test]
+fn test_header_case() {
+    assert!(header_eq("Accept-Encoding", "accept-encoding"));
+    assert_eq!(to_header_case("X-ForWard-For"), ~"X-Forward-For");
+    assert_eq!(to_header_case("accept-encoding"), ~"Accept-Encoding");
+}
+
+#[test]
+fn test_visit_weather_sug() {
+    let url : Url = from_str("http://toy1.weather.com.cn/search?cityname=yulin&_=2").unwrap();
+
+    let mut req = Request::new_with_url(&url);
+    req.headers.find_or_insert(~"Referer", ~[~"http://www.weather.com.cn/"]);
+
+    let mut h = HTTPHandler { debug: true };
+    let mut resp = h.handle(&mut req).unwrap();
+
+    let content = match resp.read_to_str() {
+        Ok(content) => {
+            content
+        }
+        Err(_) =>
+            ~""
+    };
+    assert!(content.len() > 10);
+    assert!(resp.status == 200);
+}
+
+
+
 
 /*
 GET /fuck HTTP/1.1
