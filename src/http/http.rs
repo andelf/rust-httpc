@@ -1,11 +1,12 @@
 extern crate extra;
 extern crate collections;
+extern crate time;
 
 
 use std::io::net::addrinfo::get_host_addresses;
 use std::io::net::ip::SocketAddr;
 use std::io::net::tcp::TcpStream;
-use std::io::BufferedStream;
+use std::io::{BufferedReader,BufferedWriter};
 use std::io;
 use std::io::IoResult;
 
@@ -22,6 +23,7 @@ use extra::url::{Url, query_to_str};
 
 use collections::HashMap;
 
+mod cookie;
 
 static USER_AGENT : &'static str = "Rust-http-helper/0.1dev";
 static HTTP_PORT : u16 = 80;
@@ -185,14 +187,13 @@ impl Handler for HTTPHandler {
 
         let stream = TcpStream::connect(addr).unwrap();
         let read_stream = stream.clone();
-        let mut stream = BufferedStream::new(stream);
+        let mut stream = BufferedWriter::new(stream);
 
         // METHOD /path HTTP/v.v
         let request_method = req.method.to_str();
         stream.write_str(request_method);
         stream.write_str(" ");
         stream.write_str(uri.path);
-        println!("uri.path => |{}|", uri.path);
 
         if !uri.query.is_empty() {
             stream.write_char('?');
@@ -223,6 +224,19 @@ impl Handler for HTTPHandler {
 }
 
 
+pub struct GzipHandler {
+    debug: bool
+}
+
+impl Handler for GzipHandler {
+    fn response(&mut self, req: Request, resp: Response) -> Option<Response> {
+        None
+
+    }
+}
+
+
+
 pub struct Response<'a> {
     version: HttpVersion,
     status: int,
@@ -232,12 +246,13 @@ pub struct Response<'a> {
     priv chunked: bool,
     priv chunked_left: Option<uint>,
     priv length: Option<uint>,
-    priv sock: BufferedStream<TcpStream>
+    // make sock a owned Buffer
+    priv sock: ~Buffer // BufferedStream<TcpStream>
 }
 
 impl<'a> Response<'a> {
     pub fn new_with_stream(s: &'a TcpStream) -> Response {
-        let mut stream = BufferedStream::new(s.clone());
+        let mut stream = ~BufferedReader::new(s.clone());
         //let mut stream = s;
         let line = stream.read_line().unwrap(); // status line
         let segs = line.splitn(' ', 2).collect::<~[&str]>();
@@ -293,7 +308,7 @@ impl<'a> Response<'a> {
         Response { version: version, status: status, reason: reason.into_owned(),
                    headers: headers,
                    chunked: chunked, chunked_left: None, length: length_opt,
-                   sock: stream, }
+                   sock: stream as ~Buffer, }
     }
 
     fn _read_next_chunk_size(&mut self) -> uint {
@@ -314,7 +329,7 @@ impl<'a> Response<'a> {
 impl<'a> Reader for Response<'a> {
     fn read(&mut self, buf: &mut [u8]) -> IoResult<uint> {
         // read 1 chunk or less
-        println!("DEBUG calls read()");
+        //println!("DEBUG calls read()");
         if self.chunked {       // TODO: handle Gzip
             match self.chunked_left {
                 Some(left) if left > 0 => {
@@ -401,10 +416,80 @@ fn dump_result(req: &Request, resp: &Response) {
     }
 
     println!("======================= response result =======================");
+    println!("status = {} reason = {}", resp.status, resp.reason);
     for (k, vs) in resp.headers.iter() {
         println!("H {:?} => {:?}", k, vs)
     }
 }
+
+#[test]
+fn test_cookie_parse() {
+    let url = from_str("http://www.google.com/").unwrap();
+    let mut req = Request::new_with_url(&url);
+    let mut h = HTTPHandler { debug : true };
+    let mut resp = h.handle(&mut req).unwrap();
+
+    dump_result(&req, &resp);
+    for set_ck in resp.headers.get(&to_header_case("set-cookie")).iter() {
+        let ck_opt = from_str::<cookie::Cookie>(*set_ck);
+        assert!(ck_opt.is_some());
+        println!("got cookie => {:?}", ck_opt);
+    }
+    assert_eq!(resp.status, 200);
+}
+
+
+#[test]
+fn test_options_request() {
+    let url = from_str("http://www.w3.org").unwrap();
+    let mut req = Request::new_with_url(&url);
+    req.method = OPTIONS;
+    let mut h = HTTPHandler { debug : true };
+    let mut resp = h.handle(&mut req).unwrap();
+
+    dump_result(&req, &resp);
+    assert_eq!(resp.status, 200);
+    assert!(resp.headers.find(&~"Allow").is_some());
+}
+
+
+
+//#[test]
+// fn test_gzip_uncompress() {
+//     let url = from_str("http://www.baidu.com").unwrap();
+//     let mut req = Request::new_with_url(&url);
+//     req.add_header("Accept", "*/*");
+//     req.add_header("Accept-Encoding", "gzip,deflate,sdch");
+//     req.add_header("User-Agent", "Mozilla/5.0");
+//     let mut h = HTTPHandler { debug : true };
+//     let mut resp = h.handle(&mut req).unwrap();
+
+//     dump_result(&req, &resp);
+//     let content = resp.read_to_end().unwrap();
+//     //println!("| {:?}", content);
+//     println!("|uncompress => {:?}", compress::zlib_uncompress(content.slice(10, content.len()-8)));
+
+
+//     assert_eq!(resp.status, 200);
+//     assert!(false);
+
+// }
+
+
+
+#[test]
+fn test_head_request() {
+    let url = from_str("http://www.baidu.com").unwrap();
+    let mut req = Request::new_with_url(&url);
+    req.method = HEAD;
+    let mut h = HTTPHandler { debug : true };
+    let mut resp = h.handle(&mut req).unwrap();
+
+    dump_result(&req, &resp);
+    println!("| {:?}", resp.read_to_str());
+    assert_eq!(resp.status, 405);
+}
+
 
 #[test]
 fn test_yahoo_redirect_response() {
@@ -415,26 +500,27 @@ fn test_yahoo_redirect_response() {
     let mut h = HTTPHandler { debug: true };
     let mut resp = h.handle(&mut req).unwrap();
 
-    let content = match resp.read_to_end() {
+    let content = match resp.read_to_str() {
         Ok(content) => {
             content
         }
         Err(_) =>
             ~""
     };
-    println!("content = {:}", content);
+    dump_result(&req, &resp);
+    println!("content = {:?}", content);
+    assert!(false);
 }
 
 
 #[test]
 fn test_header_case() {
-    assert!(header_eq("Accept-Encoding", "accept-encoding"));
     assert_eq!(to_header_case("X-ForWard-For"), ~"X-Forward-For");
     assert_eq!(to_header_case("accept-encoding"), ~"Accept-Encoding");
 }
 
 #[test]
-fn test_visit_weather_sug() {
+fn test_weather_sug() {
     let url : Url = from_str("http://toy1.weather.com.cn/search?cityname=yulin&_=2").unwrap();
 
     let mut req = Request::new_with_url(&url);
