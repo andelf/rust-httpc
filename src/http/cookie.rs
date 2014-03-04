@@ -15,27 +15,34 @@ pub struct Cookie {
     secure: bool,
     http_only: bool,
     version: int,
-    max_age: int,
     created: Tm,
     expires: Option<Tm>,
 }
 
-#[deriving(Eq)]
+#[deriving(Eq, Clone)]
 impl Cookie {
     pub fn new_with_name_value(name: &str, value: &str) -> Cookie {
         Cookie { name: name.into_owned(), value: value.into_owned(),
                  domain: None, path: None, comment: None,
                  secure: false, http_only: false,
-                 version: 0, max_age: 0, created: now_utc(),
+                 version: 0, created: now_utc(),
                  expires: None }
     }
 }
 
-
 impl Cookie {
-    fn to_header(&self) -> ~str {
+    pub fn to_header(&self) -> ~str {
         format!("{}={}", self.name, self.value)
     }
+
+    pub fn is_expired(&self) -> bool {
+        let now = now_utc();
+        let expires = self.expires.clone();
+        //self.expires.is_some() ||
+        // None return false
+        expires.map_or(now.to_timespec(), |tm| tm.to_timespec()) < now.to_timespec()
+    }
+
 }
 
 
@@ -45,7 +52,7 @@ impl Show for Cookie {
         f.buf.write_str(format!("{}={}", self.name, self.value));
         if !self.expires.is_none() {
             f.buf.write_str(format!("; expires={}",
-                                 strftime("%a, %d-%b-%y %H:%M:%S %Z", &self.expires.clone().unwrap())));
+                                    strftime("%a, %d-%b-%Y %H:%M:%S %Z", &self.expires.clone().unwrap())));
         }
         if !self.path.is_none() {
             f.buf.write_str(format!("; path={}", self.path.clone().unwrap()));
@@ -75,14 +82,28 @@ impl FromStr for Cookie {
                     // TODO: GMT vs UTC
                     ~"expires" => {
                         ck.expires = match strptime(kv[1], "%a, %d-%b-%y %H:%M:%S %Z") {
+                            Ok(tm) => { // 2-digits year format is buggy
+                                let mut tm = tm;
+                                if tm.tm_year < 1950 {
+                                    tm.tm_year += 100
+                                }
+                                Some(tm)
+                            }
                             Err(_) => match strptime(kv[1], "%a, %d-%b-%Y %H:%M:%S %Z") {
                                 Err(_) => None,
                                 Ok(tm) => Some(tm)
                             },
-                            Ok(tm) => Some(tm)
+
                         }
                     }
-                    ~"max-age" => { ck.max_age = from_str(kv[1]).unwrap() }
+                    // max-age may override expires with a bigger val
+                    ~"max-age" => {
+                        let age : i64 = from_str(kv[1]).unwrap();
+                        let mut ts = time::get_time();
+                        ts.sec += age;
+                        let tm = time::at_utc(ts);
+                        ck.expires = Some(tm)
+                    }
                     ~"path"    => { ck.path = Some(kv[1].into_owned()) }
                     ~"domain"  => { ck.domain = Some(kv[1].into_owned()) }
                     _ => { println!("unknown kv => {:?}", kv); }

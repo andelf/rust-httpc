@@ -2,11 +2,11 @@ extern crate extra;
 extern crate collections;
 extern crate time;
 
-
 use std::io::net::addrinfo::get_host_addresses;
 use std::io::net::ip::SocketAddr;
 use std::io::net::tcp::TcpStream;
 use std::io::{BufferedReader,BufferedWriter};
+use std::io::util::{LimitReader, copy};
 use std::io;
 use std::io::IoResult;
 
@@ -23,6 +23,9 @@ use extra::url::{Url, query_to_str};
 
 use collections::HashMap;
 
+use cookie::Cookie;
+pub use urlencode = extra::url::query_to_str;
+
 mod cookie;
 
 static USER_AGENT : &'static str = "Rust-http-helper/0.1dev";
@@ -31,43 +34,13 @@ static HTTP_PORT : u16 = 80;
 
 #[deriving(Show)]
 pub enum HttpMethod {
-      /**
-     *  A request for information about the communication options
-     *  available on the request/response chain
-     */
     OPTIONS,
-    /**
-     * Retrieve whatever information (in the form of an entity)
-     * is identified by the Request-URI
-     */
     GET,
-    /**
-     * Identical to GET except that the server MUST NOT return a
-     * message-body in the response
-     */
     HEAD,
-    /**
-     * Requests that the origin server accept the entity enclosed in the
-     * request as a new subordinate of the resource identified by the
-     * Request-URI in the Request-Line
-     */
     POST,
-    /**
-     * Requests that the enclosed entity be stored under the supplied Request-URI
-     */
     PUT,
-    /**
-     * Requests that the origin server delete the resource identified
-     * by the Request-URI
-     */
     DELETE,
-    /**
-     * Requests a remote, application-layer loop- back of the request message
-     */
     TRACE,
-    /**
-     * Reserved
-     */
     CONNECT,
 }
 
@@ -92,8 +65,7 @@ pub struct Request<'a> {
     uri: Url,
     method: HttpMethod,
     headers: HashMap<~str, ~[~str]>,
-    content: Option<&'a Reader>
-
+    content: ~[u8],
 }
 
 impl<'a> Request<'a> {
@@ -104,8 +76,14 @@ impl<'a> Request<'a> {
             uri.path = ~"/";
         }
         Request { version: HTTP_1_1, uri: uri, method: GET,
-                  headers: HashMap::new(), content: None}
+                  headers: HashMap::new(),
+                  content: ~[]}
     }
+
+    pub fn add_body(&mut self, body: &[u8]) {
+        self.content = body.into_owned();
+    }
+
     pub fn add_header(&mut self, key: &str, value: &str) {
         self.headers.insert_or_update_with(to_header_case(key),
                                            ~[value.into_owned()],
@@ -149,14 +127,10 @@ pub struct HTTPHandler {
     debug: bool
 }
 
-#[allow(unused_must_use)]
 impl Handler for HTTPHandler {
-    // TODO pre request: add ness header
     // TODO after request: error handling
     fn request(&mut self, req: &mut Request) -> Option<Request> {
         let uri = req.uri.clone();
-        // let mut host = uri.host.clone();
-        // if !uri.port.is_none() { host.push_str(format!(":{}", uri.port.unwrap())) }
         let host = uri.port.map_or(req.uri.host.clone(),
                                    |p| format!("{}:{}", req.uri.host, p));
         req.headers.find_or_insert(~"Host", ~[host]);
@@ -166,11 +140,19 @@ impl Handler for HTTPHandler {
         // not support x-gzip or x-deflate.
         req.headers.find_or_insert(~"Accept-Encoding", ~[~"identity"]);
 
+        // not support keep-alive connection
         req.headers.find_or_insert(~"Connection", ~[~"close"]);
 
-        // for (key, values) in req.headers.iter() {
-        //     println!("dump HEADER {:?} => {:?}", key, values);
-        // }
+        match req.method {
+            POST | PUT => {
+                req.headers.find_or_insert(~"Content-Length", ~[req.content.len().to_str()]);
+                req.headers.find_or_insert(~"Content-Type", ~[~"application/x-www-form-urlencoded"]);
+            },
+            _ => {
+                log!(::std::logging::WARN, "POST/PUT without a content");
+                req.headers.find_or_insert(~"Content-Length", ~[~"0"]);
+            },
+        }
         None
     }
 
@@ -190,9 +172,8 @@ impl Handler for HTTPHandler {
         let mut stream = BufferedWriter::new(stream);
 
         // METHOD /path HTTP/v.v
-        let request_method = req.method.to_str();
-        stream.write_str(request_method);
-        stream.write_str(" ");
+        stream.write_str(req.method.to_str());
+        stream.write_char(' ');
         stream.write_str(uri.path);
 
         if !uri.query.is_empty() {
@@ -202,21 +183,27 @@ impl Handler for HTTPHandler {
 
         stream.write_str(" ");
         stream.write_str(req.version.to_str());
-        stream.write_char('\n');
+        stream.write_str("\r\n");
 
         // headers
         for (k, vs) in req.headers.iter() {
             stream.write_str(*k);
-            stream.write(bytes!(": "));
+            stream.write_str(": ");
             for (i, v) in vs.iter().enumerate() {
                 stream.write_str(*v);
                 // FIXME: multi-value header line
-                if i > 0 { stream.write(bytes!("; ")); }
+                if i > 0 { stream.write_str("; "); }
             }
-            stream.write(bytes!("\n"));
+            stream.write_str("\r\n");
         }
 
-        stream.write(bytes!("\n"));
+        stream.write_str("\r\n");
+
+        match req.method {
+            POST | PUT => stream.write(req.content),
+            _ => Ok(())
+        };
+
         stream.flush();
 
         Some(Response::new_with_stream(&read_stream))
@@ -231,8 +218,27 @@ pub struct GzipHandler {
 impl Handler for GzipHandler {
     fn response(&mut self, req: Request, resp: Response) -> Option<Response> {
         None
-
     }
+}
+
+pub struct CookieJar {
+    // [Domain Path Name]
+    cookies: HashMap<~str, HashMap<~str, HashMap<~str, Cookie>>>
+}
+
+impl CookieJar {
+    pub fn new() -> CookieJar {
+        CookieJar { cookies: HashMap::new() }
+    }
+
+    pub fn process_response(&mut self, req: &Request, resp: &Response) {
+        for set_ck in resp.headers.get(&to_header_case("set-cookie")).iter() {
+            let ck_opt = from_str::<Cookie>(*set_ck);
+            assert!(ck_opt.is_some());
+            let ck = ck_opt.unwrap();
+        }
+    }
+
 }
 
 
@@ -256,7 +262,7 @@ impl<'a> Response<'a> {
         //let mut stream = s;
         let line = stream.read_line().unwrap(); // status line
         let segs = line.splitn(' ', 2).collect::<~[&str]>();
-        println!("DEBUG header segs {:?}", segs);
+        //println!("DEBUG header segs {:?}", segs);
         let version = match segs[0] {
             "HTTP/1.1"                  => HTTP_1_1,
             "HTTP/1.0"                  => HTTP_1_0,
@@ -266,7 +272,8 @@ impl<'a> Response<'a> {
         let status = from_str::<int>(segs[1]).unwrap();
         let reason = segs[2].trim_right();
 
-        println!("HTTP version = {:?} status = {:?} reason = {:?}", version, status, reason);
+        println!("DEBUG HTTP version = {:?} status = {:?} reason = {:?}",
+                 version, status, reason);
 
         let mut headers = HashMap::new();
         loop {
@@ -275,8 +282,7 @@ impl<'a> Response<'a> {
             if segs.len() == 2 {
                 let k = segs[0];
                 let v = segs[1].trim();
-                // println!("HEADER {:?} => |{:?}|", k, v);
-                headers.insert_or_update_with(k.into_owned(), ~[v.into_owned()],
+                headers.insert_or_update_with(to_header_case(k), ~[v.into_owned()],
                                               |_k, ov| ov.push(v.into_owned()));
             } else {
                 if [~"\r\n", ~"\n", ~""].contains(&line) {
@@ -311,6 +317,17 @@ impl<'a> Response<'a> {
                    sock: stream as ~Buffer, }
     }
 
+    pub fn get_headers(&self, header_name: &str) -> ~[~str] {
+        let mut ret : ~[~str] = ~[];
+        match self.headers.find(&to_header_case(header_name)) {
+            Some(hdrs) => for hdr in hdrs.iter() {
+                ret.push(hdr.clone())
+            },
+            _ => ()
+        }
+        ret
+    }
+
     fn _read_next_chunk_size(&mut self) -> uint {
         let line = self.sock.read_line().unwrap();
         println!("_read_next_chunk_size, line = {:?}", line);
@@ -324,6 +341,7 @@ impl<'a> Response<'a> {
             None => fail!("wrong chunk size value")
         }
     }
+
 }
 
 impl<'a> Reader for Response<'a> {
@@ -371,41 +389,33 @@ impl<'a> Reader for Response<'a> {
 
 fn main() {
     //let u = ~"http://flash.weather.com.cn/sk2/101010100.xml";
-    //let u = ~"http://www.google.com/";
-    //let u = ~"http://fledna.duapp.com/ip";
-    //let u = ~"http://127.0.0.1:8888/fuckyou_self_and";
-    //let u = ~"http://www.baidu.com";
-    //let u = ~"http://weibo.com";
-    //let u = ~"http://zx.bjmemc.com.cn/ashx/Data.ashx?Action=GetAQIClose1h";
-    //    let u = "http://www.yahoo.com.cn";
-    //let u = "http://sg.search.yahoo.com/";
-    //let u = "http://www.renren.com/";
-    let u = "http://www.baidu.com/#wd=http%201.1%20zlib%20uncompress&rsv_spt=1&issp=1&rsv_bp=0&ie=utf-8&tn=baiduhome_pg&rsv_sug3=1&rsv_sug4=17&rsv_sug2=0&inputT=6";
+    let u = ~"http://zx.bjmemc.com.cn/ashx/Data.ashx?Action=GetAQIClose1h";
+    //let u = "http://www.gpsspg.com/ajax/latlng_office_maps.aspx?lat=39.91433268343&lng=116.46717705386&type=1";
+    //req.add_header("Referer", "http://www.gpsspg.com/apps/maps/google_131201.htm");
 
     let url : Url = from_str(u).unwrap();
-
     let mut req = Request::new_with_url(&url);
-    // req.headers.find_or_insert(~"Accept-Encoding", ~[~"gzip,deflate,sdch"]);
-    // req.headers.find_or_insert(~"Accept", ~[~"*/*"]);
-    // req.headers.find_or_insert(~"User-Agent", ~[~"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/34.0.1847.11 Safari/537.36"]);
+    //req.method = POST;
 
+    //req.add_header("user-agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 5_0 like Mac OS X) AppleWebKit/534.46 (KHTML, like Gecko) Version/5.1 Mobile/9A334 Safari/7534.48.3");
 
     let mut h = HTTPHandler { debug: true };
     let mut resp = h.handle(&mut req).unwrap();
 
-    let mut s = ~"";
+    dump_result(&req, &resp);
 
-    match resp.read_to_str() {
+    match resp.read_to_end() {
         Ok(content) => {
-            s = s + content;
-            println!("| {}", content);
+            for c in content.iter() {
+                print!("{:c}", *c as char);
+            }
+            println!("DEBUG read bytes=> {}", content.len());
         }
         Err(e) => {
             println!("! read error: {:?}", e);
         }
     }
-    println!("DEBUG read bytes=> {}", s.len());
-    dump_result(&req, &resp);
+    println!("get_headers = {:?}", resp.get_headers("set-cookie"));
 }
 
 
@@ -423,19 +433,56 @@ fn dump_result(req: &Request, resp: &Response) {
 }
 
 #[test]
+fn test_post() {
+    let url = from_str("http://202.118.8.2:8080/book/queryOut.jsp").unwrap();
+    let mut req = Request::new_with_url(&url);
+    let mut h = HTTPHandler { debug : true };
+
+    req.method = POST;
+    req.add_body(bytes!("kind=simple&type=title&word=erlang&match=mh&recordtype=01&library_id=all&x=40&y=10"));
+
+    let mut resp = h.handle(&mut req).unwrap();
+
+    dump_result(&req, &resp);
+    // charset = gbk
+    match resp.read_to_end() {
+        Ok(content) => {
+            for c in content.iter() {
+                print!("{:c}", *c as char);
+            }
+            println!("DEBUG read bytes=> {}", content.len());
+        }
+        Err(e) => {
+            println!("! read error: {:?}", e);
+        }
+    }
+
+
+    assert!(false);
+
+}
+
+
+
+#[test]
 fn test_cookie_parse() {
-    let url = from_str("http://www.google.com/").unwrap();
+    let url = from_str("http://www.baidu.com/").unwrap();
     let mut req = Request::new_with_url(&url);
     let mut h = HTTPHandler { debug : true };
     let mut resp = h.handle(&mut req).unwrap();
 
     dump_result(&req, &resp);
     for set_ck in resp.headers.get(&to_header_case("set-cookie")).iter() {
-        let ck_opt = from_str::<cookie::Cookie>(*set_ck);
+        let ck_opt = from_str::<Cookie>(*set_ck);
         assert!(ck_opt.is_some());
-        println!("got cookie => {:?}", ck_opt);
+        let ck = ck_opt.unwrap();
+        //println!("got cookie => {:?}", ck);
+        println!("expired => {:?}", ck.is_expired());
+        println!("str => {:?}", ck.to_header());
+        println!("str => {:?}", ck.to_str());
     }
     assert_eq!(resp.status, 200);
+    assert!(false);
 }
 
 
