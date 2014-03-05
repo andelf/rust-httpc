@@ -6,6 +6,8 @@ use time::{Tm, now_utc, strptime, strftime};
 
 use std::ascii::StrAsciiExt;
 
+// TODO: how to express not provided in header line
+#[deriving(Eq, Clone)]
 pub struct Cookie {
     name: ~str,
     value: ~str,
@@ -19,7 +21,6 @@ pub struct Cookie {
     expires: Option<Tm>,
 }
 
-#[deriving(Eq, Clone)]
 impl Cookie {
     pub fn new_with_name_value(name: &str, value: &str) -> Cookie {
         Cookie { name: name.into_owned(), value: value.into_owned(),

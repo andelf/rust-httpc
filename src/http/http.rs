@@ -10,9 +10,12 @@ use std::io::util::{LimitReader, copy};
 use std::io;
 use std::io::IoResult;
 
+use std::str;
 use std::vec;
 
 use std::fmt::{Show, Formatter, Result};
+
+use std::logging;
 
 // for to_ascii_lower, eq_ignore_ascii_case
 use std::ascii::StrAsciiExt;
@@ -26,7 +29,7 @@ use collections::HashMap;
 use cookie::Cookie;
 pub use urlencode = extra::url::query_to_str;
 
-mod cookie;
+pub mod cookie;
 
 static USER_AGENT : &'static str = "Rust-http-helper/0.1dev";
 static HTTP_PORT : u16 = 80;
@@ -231,12 +234,76 @@ impl CookieJar {
         CookieJar { cookies: HashMap::new() }
     }
 
+    pub fn add_cookie_header(&self, req: &mut Request) {
+    }
+
+    pub fn set_cookie(&mut self, domain: &str, path: &str, ck: Cookie) {
+        let domain = domain.into_owned();
+        let path = path.into_owned();
+        let name = ck.clone().name;
+        let mut m1 = &mut self.cookies;
+        if m1.contains_key(&domain) {
+            let mut m2 = m1.find_mut(&domain).unwrap();
+            if m2.contains_key(&path) {
+                let mut m3 = m2.find_mut(&path).unwrap();
+                m3.insert(name, ck);
+            } else {
+                let mut m3 = HashMap::new();
+                m3.insert(name, ck);
+                m2.insert(path, m3);
+            }
+        } else {
+            let mut m3 = HashMap::new();
+            m3.insert(name, ck);
+            let mut m2 = HashMap::new();
+            m2.insert(path, m3);
+            m1.insert(domain, m2);
+        }
+    }
     pub fn process_response(&mut self, req: &Request, resp: &Response) {
         for set_ck in resp.headers.get(&to_header_case("set-cookie")).iter() {
             let ck_opt = from_str::<Cookie>(*set_ck);
             assert!(ck_opt.is_some());
             let ck = ck_opt.unwrap();
         }
+    }
+
+    pub fn set_cookie_if_ok(&mut self, ck: Cookie, req: &Request) {
+        let domain = ck.clone().domain.unwrap_or(req.uri.clone().host);
+        let path = ck.clone().path.unwrap_or(~"/");
+        // TODO: add simple Cookie polocy here
+        self.set_cookie(domain, path, ck);
+    }
+
+
+    pub fn cookies_for_request(&mut self, req: &Request) -> ~[Cookie] {
+        let uri = req.uri.clone();
+        let domain = uri.clone().host;
+        let path = uri.clone().path;
+        let m1 = &self.cookies;
+        let scheme = uri.scheme.clone();
+        let port = uri.port.unwrap_or(~"80");
+
+        let mut ret = ~[];
+        // find domain
+        for d in m1.keys() {
+            if (d.starts_with(".") && domain.ends_with(*d)) || str::eq(d, &domain) {
+                let m2 = m1.find(d).unwrap();
+                // find path
+                for p in m2.keys() {
+                    if path.starts_with(*p) {
+                        // find key
+                        let m3 = m2.find(p).unwrap();
+                        for ck in m3.values() {
+                            if ck.is_expired() { continue };
+                            ret.push(ck.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        ret
     }
 
 }
@@ -432,8 +499,34 @@ fn dump_result(req: &Request, resp: &Response) {
     }
 }
 
+
 #[test]
-fn test_post() {
+fn test_cookie_parse() {
+    let url = from_str("http://www.baidu.com/").unwrap();
+    let mut req = Request::new_with_url(&url);
+    let mut h = HTTPHandler { debug : true };
+    let mut resp = h.handle(&mut req).unwrap();
+
+    let mut cj = CookieJar::new();
+    dump_result(&req, &resp);
+    for set_ck in resp.headers.get(&to_header_case("set-cookie")).iter() {
+        let ck_opt = from_str::<Cookie>(*set_ck);
+        assert!(ck_opt.is_some());
+        let ck = ck_opt.unwrap();
+
+        //println!("got cookie => {:?}", ck);
+        info!("expired => {:?}", ck.is_expired());
+        println!("header req => {:?}", ck.to_header());
+        //println!("header_str => {:?}", ck.to_str());
+        cj.set_cookie_if_ok(ck, &req);
+    }
+    assert!(cj.cookies_for_request(&req).len() > 0);
+    println!("CJ => {:?}", cj);
+    assert_eq!(resp.status, 200);
+}
+
+#[test]
+fn test_post_request() {
     let url = from_str("http://202.118.8.2:8080/book/queryOut.jsp").unwrap();
     let mut req = Request::new_with_url(&url);
     let mut h = HTTPHandler { debug : true };
@@ -456,35 +549,8 @@ fn test_post() {
             println!("! read error: {:?}", e);
         }
     }
-
-
-    assert!(false);
-
-}
-
-
-
-#[test]
-fn test_cookie_parse() {
-    let url = from_str("http://www.baidu.com/").unwrap();
-    let mut req = Request::new_with_url(&url);
-    let mut h = HTTPHandler { debug : true };
-    let mut resp = h.handle(&mut req).unwrap();
-
-    dump_result(&req, &resp);
-    for set_ck in resp.headers.get(&to_header_case("set-cookie")).iter() {
-        let ck_opt = from_str::<Cookie>(*set_ck);
-        assert!(ck_opt.is_some());
-        let ck = ck_opt.unwrap();
-        //println!("got cookie => {:?}", ck);
-        println!("expired => {:?}", ck.is_expired());
-        println!("str => {:?}", ck.to_header());
-        println!("str => {:?}", ck.to_str());
-    }
     assert_eq!(resp.status, 200);
-    assert!(false);
 }
-
 
 #[test]
 fn test_options_request() {
@@ -494,7 +560,6 @@ fn test_options_request() {
     let mut h = HTTPHandler { debug : true };
     let mut resp = h.handle(&mut req).unwrap();
 
-    dump_result(&req, &resp);
     assert_eq!(resp.status, 200);
     assert!(resp.headers.find(&~"Allow").is_some());
 }
@@ -526,45 +591,28 @@ fn test_options_request() {
 
 #[test]
 fn test_head_request() {
-    let url = from_str("http://www.baidu.com").unwrap();
+    let url = from_str("http://www.w3.org").unwrap();
     let mut req = Request::new_with_url(&url);
     req.method = HEAD;
     let mut h = HTTPHandler { debug : true };
     let mut resp = h.handle(&mut req).unwrap();
 
-    dump_result(&req, &resp);
-    println!("| {:?}", resp.read_to_str());
-    assert_eq!(resp.status, 405);
+    assert_eq!(resp.read_to_end().unwrap().len(), 0);
+    assert_eq!(resp.status, 200);
 }
-
 
 #[test]
 fn test_yahoo_redirect_response() {
     let url = from_str("http://www.yahoo.com.cn").unwrap();
     let mut req = Request::new_with_url(&url);
-    req.headers.find_or_insert(~"Accept-Encoding", ~[~"gzip,deflate,sdch"]);
+    //req.headers.find_or_insert(~"Accept-Encoding", ~[~"gzip,deflate,sdch"]);
 
     let mut h = HTTPHandler { debug: true };
     let mut resp = h.handle(&mut req).unwrap();
 
-    let content = match resp.read_to_str() {
-        Ok(content) => {
-            content
-        }
-        Err(_) =>
-            ~""
-    };
-    dump_result(&req, &resp);
-    println!("content = {:?}", content);
-    assert!(false);
+    assert_eq!(resp.status, 301);
 }
 
-
-#[test]
-fn test_header_case() {
-    assert_eq!(to_header_case("X-ForWard-For"), ~"X-Forward-For");
-    assert_eq!(to_header_case("accept-encoding"), ~"Accept-Encoding");
-}
 
 #[test]
 fn test_weather_sug() {
@@ -587,17 +635,8 @@ fn test_weather_sug() {
     assert!(resp.status == 200);
 }
 
-
-
-
-/*
-GET /fuck HTTP/1.1
-Host: localhost:8088
-Connection: keep-alive
-Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,* / *;q=0.8
-User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/34.0.1838.2 Safari/537.36
-Accept-Encoding: gzip,deflate,sdch
-Accept-Language: en-US,en;q=0.8
-RA-Ver: 1.7.2
-RA-Sid: 0E8202A9-20131112-145528-03b634-2d1e16
-*/
+#[test]
+fn test_header_case() {
+    assert_eq!(to_header_case("X-ForWard-For"), ~"X-Forward-For");
+    assert_eq!(to_header_case("accept-encoding"), ~"Accept-Encoding");
+}
