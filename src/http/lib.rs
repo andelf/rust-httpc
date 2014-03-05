@@ -129,13 +129,19 @@ pub trait Handler {
     fn response(&mut self, req: Request, resp: Response) -> Option<Response> { None }
     fn handle(&mut self, req: &mut Request) -> Option<Response> { None }
 
-    fn handler_order() -> int { 100 }
+    fn handle_order() -> int { 100 }
 }
 
 
 
 pub struct HTTPHandler {
     debug: bool
+}
+
+impl HTTPHandler {
+    pub fn new() -> HTTPHandler {
+        HTTPHandler { debug: false }
+    }
 }
 
 impl Handler for HTTPHandler {
@@ -184,9 +190,9 @@ impl Handler for HTTPHandler {
 
         // METHOD /path HTTP/v.v
         stream.write_str(req.method.to_str());
+
         stream.write_char(' ');
         stream.write_str(uri.path);
-
         if !uri.query.is_empty() {
             stream.write_char('?');
             stream.write_str(urlencode(&uri.query));
@@ -194,6 +200,7 @@ impl Handler for HTTPHandler {
 
         stream.write_str(" ");
         stream.write_str(req.version.to_str());
+
         stream.write_str("\r\n");
 
         // headers
@@ -228,6 +235,47 @@ pub struct GzipHandler {
 
 impl Handler for GzipHandler {
     fn response(&mut self, _req: Request, _resp: Response) -> Option<Response> {
+        None
+    }
+}
+
+pub struct HTTPCookieProcessor {
+    jar: CookieJar
+}
+
+impl Handler for HTTPCookieProcessor {
+    fn request(&mut self, req: &mut Request) -> Option<Request> {
+        for ck in self.jar.cookies_for_request(req).iter() {
+            req.add_header("Cookie", ck.to_header());
+        }
+        None
+    }
+    fn response(&mut self, req: Request, resp: Response) -> Option<Response> {
+        for set_ck in resp.headers.get(&to_header_case("set-cookie")).iter() {
+            let ck_opt = from_str::<Cookie>(*set_ck);
+            if ck_opt.is_some() {
+                let ck = ck_opt.unwrap();
+                self.jar.set_cookie_if_ok(ck, &req);
+
+            }
+        }
+        None
+    }
+}
+
+
+pub struct OpenDirector {
+    handlers: ~[~Handler]
+}
+
+impl OpenDirector {
+    pub fn new() -> OpenDirector {
+        OpenDirector { handlers:
+                       ~[~HTTPHandler::new() as ~Handler,
+//                         ~HTTPCookieProcessor::new()
+                         ] }
+    }
+    pub fn open(&mut self, req: Request) -> Option<Response> {
         None
     }
 }
