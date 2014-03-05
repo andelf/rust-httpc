@@ -47,26 +47,17 @@ pub fn uncompress(src: &[u8]) -> Option<~[u8]> {
     unsafe {
         let ver = zlib::zlibVersion();
         let ret = zlib::inflateInit2_(&mut strm, 47, ver, size_of::<zlib::z_stream>() as i32);
-
-        for ch in src.chunks(256) {
+        assert_eq!(ret, Z_OK);
+        for ch in src.chunks(256) { // chunks to test how zlib treat multiple chunk
             strm.next_in = cast::transmute(&ch[0]);
             strm.avail_in = ch.len() as u32;
             strm.next_out = cast::transmute(&buf[0]);
             strm.avail_out = dst_len as u32;
 
             let ret = zlib::inflate(&mut strm, Z_NO_FLUSH);
-            println!("inflate ret = {:?}", ret);
-            println!("total_out => {:?}", strm.total_out);
-            println!("avail_out => {:?}", strm.avail_out);
-            assert_eq!(strm.avail_in, 0);
+            if ret != 0 && ret != 1 { fail!("bad ret code: {}", ret) }
         }
-            // if ret != 0 && ret != 1 { fail!("bad ret code: {}", ret) }
-        let ret = zlib::inflateEnd(&mut strm);
-        println!("ret = {}", ret);
-        println!("total_out => {:?}", strm.total_out);
-        println!("avail_out => {:?}", strm.avail_out);
-
-        println!("debug => {:?}", strm);
+        zlib::inflateEnd(&mut strm);
 
     }
 
@@ -101,7 +92,7 @@ impl<R:Reader> GzipReader<R> {
         let ret = unsafe {
             zlib::inflateInit2_(&mut strm, 47, zlib::zlibVersion(), size_of::<zlib::z_stream>() as i32)
         };
-        assert_eq!(ret, 0);
+        assert_eq!(ret, Z_OK);
         GzipReader { inner: r, zs: strm  }
     }
 }
@@ -111,7 +102,6 @@ impl<R:Reader> Reader for GzipReader<R> {
      fn read(&mut self, buf: &mut [u8]) -> IoResult<uint> {
         let buf_len = buf.len();
         let mut tbuf = vec::from_elem(buf_len / 2, 0u8);
-        let tbuf_len = buf_len / 2;
         let mut strm = &mut self.zs;
         match self.inner.read(tbuf) {
             Ok(n) if n > 0 => unsafe {
@@ -121,13 +111,13 @@ impl<R:Reader> Reader for GzipReader<R> {
                 strm.avail_out = buf_len as u32;
 
                 let ret = zlib::inflate(strm, Z_NO_FLUSH);
-                println!("inflate ret = {:?}", ret);
-                println!("total_out => {:?}", strm.total_out);
-                println!("avail_out => {:?}", strm.avail_out);
+                // println!("inflate ret = {:?}", ret);
+                // println!("total_out => {:?}", strm.total_out);
+                // println!("avail_out => {:?}", strm.avail_out);
 
-                if ret != 0 && ret != 1 { fail!("bad ret code: {}", ret) }
-                println!("ret = {}", ret);
-                println!("debug => {:?}", strm);
+                if ret != Z_OK && ret != Z_STREAM_END { fail!("bad ret code: {}", ret) }
+                // println!("ret = {}", ret);
+                // println!("debug => {:?}", strm);
                 // TODO: handle this condition: if buf too small, this fails.
                 assert_eq!(strm.avail_in, 0);
                 let writen : uint = buf_len - strm.avail_out as uint; //
@@ -138,6 +128,8 @@ impl<R:Reader> Reader for GzipReader<R> {
             }
             Err(e) => {
                 if e.kind == io::EndOfFile {
+                    let ret = unsafe { zlib::inflateEnd(strm) };
+                    assert_eq!(ret, Z_OK);
                     Err(io::standard_error(io::EndOfFile))
                 } else {
                     Err(e)
