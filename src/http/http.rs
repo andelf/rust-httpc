@@ -1,21 +1,21 @@
+#[allow(unused_must_use)];
+#[allow(dead_code)];
+
 extern crate extra;
 extern crate collections;
 extern crate time;
 
+use std::io;
 use std::io::net::addrinfo::get_host_addresses;
 use std::io::net::ip::SocketAddr;
 use std::io::net::tcp::TcpStream;
 use std::io::{BufferedReader,BufferedWriter};
-use std::io::util::{LimitReader, copy};
-use std::io;
 use std::io::IoResult;
 
 use std::str;
 use std::vec;
 
 use std::fmt::{Show, Formatter, Result};
-
-use std::logging;
 
 // for to_ascii_lower, eq_ignore_ascii_case
 use std::ascii::StrAsciiExt;
@@ -219,7 +219,7 @@ pub struct GzipHandler {
 }
 
 impl Handler for GzipHandler {
-    fn response(&mut self, req: Request, resp: Response) -> Option<Response> {
+    fn response(&mut self, _req: Request, _resp: Response) -> Option<Response> {
         None
     }
 }
@@ -229,12 +229,10 @@ pub struct CookieJar {
     cookies: HashMap<~str, HashMap<~str, HashMap<~str, Cookie>>>
 }
 
+#[allow(unused_mut)]
 impl CookieJar {
     pub fn new() -> CookieJar {
         CookieJar { cookies: HashMap::new() }
-    }
-
-    pub fn add_cookie_header(&self, req: &mut Request) {
     }
 
     pub fn set_cookie(&mut self, domain: &str, path: &str, ck: Cookie) {
@@ -265,6 +263,7 @@ impl CookieJar {
             let ck_opt = from_str::<Cookie>(*set_ck);
             assert!(ck_opt.is_some());
             let ck = ck_opt.unwrap();
+            self.set_cookie_if_ok(ck, req);
         }
     }
 
@@ -281,8 +280,8 @@ impl CookieJar {
         let domain = uri.clone().host;
         let path = uri.clone().path;
         let m1 = &self.cookies;
-        let scheme = uri.scheme.clone();
-        let port = uri.port.unwrap_or(~"80");
+        // TOOD: handle secure & httpOnly
+        //let scheme = uri.scheme.clone();
 
         let mut ret = ~[];
         // find domain
@@ -417,7 +416,7 @@ impl<'a> Reader for Response<'a> {
         //println!("DEBUG calls read()");
         if self.chunked {       // TODO: handle Gzip
             match self.chunked_left {
-                Some(left) if left > 0 => {
+                Some(left) => {
                     let mut tbuf = vec::from_elem(left, 0u8);
                     match self.sock.read(tbuf) {
                         Ok(n) => {
@@ -431,10 +430,13 @@ impl<'a> Reader for Response<'a> {
                             }
                             Ok(n)
                         }
-                        Err(e) => fail!("error read from sock: {}", e)
+                        Err(e) => {
+                            println!("error read from sock: {}", e);
+                            Err(e)
+                        }
                     }
                 }
-                _ => {          // left == 0 or left is None
+                None => {          // left == 0 or left is None
                     let chunked_left = self._read_next_chunk_size();
                     println!("1. chunked_left = {}", chunked_left);
                     if chunked_left == 0 {
@@ -450,9 +452,6 @@ impl<'a> Reader for Response<'a> {
         }
     }
 }
-
-
-
 
 fn main() {
     //let u = ~"http://flash.weather.com.cn/sk2/101010100.xml";

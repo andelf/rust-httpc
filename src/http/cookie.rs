@@ -7,6 +7,7 @@ use time::{Tm, now_utc, strptime, strftime};
 use std::ascii::StrAsciiExt;
 
 // TODO: how to express not provided in header line
+// TODO: handle port
 #[deriving(Eq, Clone)]
 pub struct Cookie {
     name: ~str,
