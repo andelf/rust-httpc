@@ -5,7 +5,7 @@
 #[crate_type = "rlib"];
 #[crate_type = "dylib"];
 
-
+#[feature(globs)];
 #[allow(unused_must_use)];
 #[allow(dead_code)];
 
@@ -37,8 +37,12 @@ pub use extra::url::Url;
 use collections::HashMap;
 
 pub use cookie::Cookie;
+pub use compress::GzipReader;
 
 pub mod cookie;
+pub mod compress;
+mod zlib;
+
 
 
 static USER_AGENT : &'static str = "Rust-http-helper/0.1dev";
@@ -126,10 +130,10 @@ pub fn to_header_case(key: &str) -> ~str {
 #[allow(unused_variable)]
 pub trait Handler {
     fn request(&mut self, req: &mut Request) -> Option<Request> { None }
-    fn response(&mut self, req: Request, resp: Response) -> Option<Response> { None }
+    fn response(&mut self, req: &Request, resp: &mut Response) -> Option<Response> { None }
     fn handle(&mut self, req: &mut Request) -> Option<Response> { None }
 
-    fn handle_order() -> int { 100 }
+    fn handle_order(&self) -> int { 100 }
 }
 
 
@@ -234,13 +238,19 @@ pub struct GzipHandler {
 }
 
 impl Handler for GzipHandler {
-    fn response(&mut self, _req: Request, _resp: Response) -> Option<Response> {
-        None
-    }
+    // fn response(&mut self, _req: Request, _resp: Response) -> Option<Response> {
+    //     None
+    // }
 }
 
 pub struct HTTPCookieProcessor {
     jar: CookieJar
+}
+
+impl HTTPCookieProcessor {
+    pub fn new() -> HTTPCookieProcessor {
+        HTTPCookieProcessor { jar: CookieJar::new() }
+    }
 }
 
 impl Handler for HTTPCookieProcessor {
@@ -250,16 +260,23 @@ impl Handler for HTTPCookieProcessor {
         }
         None
     }
-    fn response(&mut self, req: Request, resp: Response) -> Option<Response> {
-        for set_ck in resp.headers.get(&to_header_case("set-cookie")).iter() {
-            let ck_opt = from_str::<Cookie>(*set_ck);
-            if ck_opt.is_some() {
-                let ck = ck_opt.unwrap();
-                self.jar.set_cookie_if_ok(ck, &req);
-
-            }
+    fn response(&mut self, req: &Request, resp: &mut Response) -> Option<Response> {
+        match resp.headers.find(&to_header_case("set-cookie")) {
+            Some(ck_headers) => {
+                for set_ck in ck_headers.iter() {
+                    let ck_opt = from_str::<Cookie>(*set_ck);
+                    if ck_opt.is_some() {
+                        let ck = ck_opt.unwrap();
+                        self.jar.set_cookie_if_ok(ck, req);
+                    }
+                }
+            },
+            None => ()
         }
         None
+    }
+    fn handle_order(&self) -> int {
+        200
     }
 }
 
@@ -271,14 +288,32 @@ pub struct OpenDirector {
 impl OpenDirector {
     pub fn new() -> OpenDirector {
         OpenDirector { handlers:
-                       ~[~HTTPHandler::new() as ~Handler,
-//                         ~HTTPCookieProcessor::new()
-                         ] }
+                       ~[~HTTPHandler::new()         as ~Handler,
+                         ~HTTPCookieProcessor::new() as ~Handler,
+                         ]
+        }
     }
-    pub fn open(&mut self, req: Request) -> Option<Response> {
-        None
+    pub fn open(&mut self, req: &mut Request) -> Option<Response> {
+        self.handlers.sort_by(|h1,h2| h1.handle_order().cmp(&h2.handle_order()));
+        for hd in self.handlers.mut_iter() {
+            hd.request(req);
+        }
+
+        let mut resp : Response = {
+            let hd = &mut self.handlers[0];
+            hd.handle(req).unwrap()
+        };
+        for hd in self.handlers.mut_iter() {
+            hd.response(req, &mut resp);
+        }
+        Some(resp)
     }
 }
+
+pub fn build_opener() -> OpenDirector {
+    OpenDirector::new()
+}
+
 
 pub struct CookieJar {
     // [Domain Path Name]

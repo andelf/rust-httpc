@@ -1,18 +1,11 @@
-#[feature(globs)];
-
-
-use std::libc::{c_char, c_ulong, c_int};
-use std::c_str::CString;
+use std::libc::{c_char, c_int};
 use std::cast;
 use std::vec;
-use std::str;
 use std::ptr;
 use std::io;
 use std::io::IoResult;
 use std::mem::{size_of, init};
-use std::intrinsics;
 
-use zlib;
 mod zlib;
 
 
@@ -38,51 +31,6 @@ static Z_VERSION_ERROR : c_int = -6;
 */
 
 static Z_NO_FLUSH : c_int = 0;
-
-pub fn uncompress(src: &[u8]) -> Option<~[u8]> {
-    let src = src.clone();      // to owned
-    let mut buf = [0u8, ..65535];
-    let dst_len = 65535 as c_ulong;
-
-    let mut strm = unsafe { init::<zlib::z_stream>() };
-
-    unsafe {
-        let ver = zlib::zlibVersion();
-        let ret = zlib::inflateInit2_(&mut strm, 47, ver, size_of::<zlib::z_stream>() as i32);
-        assert_eq!(ret, Z_OK);
-        for ch in src.chunks(256) { // chunks to test how zlib treat multiple chunk
-            strm.next_in = cast::transmute(&ch[0]);
-            strm.avail_in = ch.len() as u32;
-            strm.next_out = cast::transmute(&buf[0]);
-            strm.avail_out = dst_len as u32;
-
-            let ret = zlib::inflate(&mut strm, Z_NO_FLUSH);
-            if ret != 0 && ret != 1 { fail!("bad ret code: {}", ret) }
-        }
-        zlib::inflateEnd(&mut strm);
-
-    }
-
-    let mut ret = vec::from_elem(strm.total_out as uint, 0u8);
-    unsafe { ret.copy_memory(buf.slice(0, strm.total_out as uint)) };
-    Some(ret)
-}
-
-fn main() {
-    unsafe {
-        let ver = zlib::zlibVersion();
-        let mut strm = init::<zlib::z_stream>();
-        let ret = zlib::inflateInit2_(&mut strm, 47, ver, size_of::<zlib::z_stream>() as i32);
-
-        println!("ret = {:?}", ret);
-
-        println!("version = {:?}", CString::new(zlib::zlibVersion(), false).as_str());
-    }
-    uncompress(bytes!("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
-}
-
-
-
 
 // for http gzip/deflate
 pub struct GzipReader<R> {
@@ -111,7 +59,7 @@ impl<R:Reader> Reader for GzipReader<R> {
      fn read(&mut self, buf: &mut [u8]) -> IoResult<uint> {
         let out_len = buf.len();
         let mut tbuf = vec::from_elem(out_len, 0u8);
-        let mut strm = &mut self.zs;
+        let strm = &mut self.zs;
 
         if self.buf_len != 0 {
             strm.next_in = unsafe { cast::transmute(&self.buf[0]) };
