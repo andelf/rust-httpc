@@ -31,11 +31,12 @@ fn main() {
     //let u = ~"http://zx.bjmemc.com.cn/ashx/Data.ashx?Action=GetAQIClose1h";
     //let u = "http://www.gpsspg.com/ajax/latlng_office_maps.aspx?lat=39.91433268343&lng=116.46717705386&type=1";
     //req.add_header("Referer", "http://www.gpsspg.com/apps/maps/google_131201.htm");
-    let u = "http://www.baidu.com";
+    //let u = "http://www.apache.org";
+    let u = "http://www.vervestudios.co/projects/compression-tests/static/js/test-libs/jquery.min.js?d=1394076086888&format=gzip";
     let url : Url = from_str(u).unwrap();
     let mut req = Request::new_with_url(&url);
 
-    req.add_header("Accept-Encoding", "gzip,deflate,sdch");
+    req.add_header("Accept-Encoding", "gzip,deflate");
     //req.method = POST;
 
     //req.add_header("user-agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 5_0 like Mac OS X) AppleWebKit/534.46 (KHTML, like Gecko) Version/5.1 Mobile/9A334 Safari/7534.48.3");
@@ -46,8 +47,22 @@ fn main() {
     dump_result(&req, &resp);
 
     println!("get_headers = {:?}", resp.get_headers("set-cookie"));
-    let mut gzreader = compress::GzipReader::new(resp);
-    println!("unzip => {:?}",  gzreader.read_to_str());
+    match resp.get_headers("Content-Encoding").head() {
+        Some(&~"gzip") => {
+            let mut gzreader = compress::GzipReader::new(resp);
+            println!("unzip => {:?}",  gzreader.read_to_str());
+        }
+        Some(ce) => {
+
+            println!("content-encoding: {:?}", ce);
+
+            let mut gzreader = compress::GzipReader::new(resp);
+            println!("unzip => {:?}",  gzreader.read_to_str());
+        }
+        None => {
+            println!("content => {:?}", resp.read_to_str());
+        }
+    }
 
 /*    match resp.read_to_end() {
         Ok(content) => {
