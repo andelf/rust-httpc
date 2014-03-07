@@ -38,6 +38,7 @@ pub struct GzipReader<R> {
     priv zs: zlib::z_stream,
     priv buf: ~[u8],
     priv buf_len: uint,
+    priv eof: bool,
 }
 
 
@@ -51,7 +52,7 @@ impl<R:Reader> GzipReader<R> {
         assert_eq!(ret, Z_OK);
         let mut buf = vec::with_capacity(cap);
         unsafe { buf.set_len(cap); }
-        GzipReader { inner: r, zs: strm, buf: buf, buf_len: 0 }
+        GzipReader { inner: r, zs: strm, buf: buf, buf_len: 0, eof: false }
     }
 }
 
@@ -72,8 +73,9 @@ impl<R:Reader> Reader for GzipReader<R> {
                 },
                 Ok(0)          => return Ok(0),
                 Err(e)         => {
-                    if e.kind == io::EndOfFile {
+                    if !self.eof && e.kind == io::EndOfFile {
                         assert_eq!(unsafe { zlib::inflateEnd(strm) }, Z_OK);
+                        self.eof = true;
                     }
                     return Err(e);
                 },
