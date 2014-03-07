@@ -6,7 +6,7 @@
 - Proof of concept.
 - Code needs clean up.
 
-## Support Following:
+## Support following:
 
 - fundamental HTTP/1.0 HTTP/1.1 (partial)
 - HTTP method: GET/POST/PUT ...
@@ -20,6 +20,7 @@
 
 - keep-alive support
 - multipart support
+- https
 - sdch support (no plan)
 - redirect support
 - cookie persistence
@@ -27,7 +28,23 @@
 - logger
 - ... and so on
 
-# Simple Usage
+## How to install
+
+### build lib
+
+    $ rustc src/http/lib.rs
+
+### build test & run test
+
+    $ rustc -L. --test src/http/test.rs
+    $ ./test
+
+### build sample program & run
+
+    $ rustc -L. src/http/main.rs
+    $ ./main
+
+## Simple Usage
 
 ```rust
 #[feature(globs)];

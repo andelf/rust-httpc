@@ -169,10 +169,7 @@ impl Handler for HTTPHandler {
                 req.headers.find_or_insert(~"Content-Length", ~[req.content.len().to_str()]);
                 req.headers.find_or_insert(~"Content-Type", ~[~"application/x-www-form-urlencoded"]);
             },
-            _ => {
-                log!(::std::logging::WARN, "POST/PUT without a content");
-                req.headers.find_or_insert(~"Content-Length", ~[~"0"]);
-            },
+            _          => (),
         }
         None
     }
@@ -416,10 +413,10 @@ pub struct Response<'a> {
 impl<'a> Response<'a> {
     pub fn new_with_stream(s: &'a TcpStream) -> Response {
         let mut stream = ~BufferedReader::new(s.clone());
-        //let mut stream = s;
+
         let line = stream.read_line().unwrap(); // status line
         let segs = line.splitn(' ', 2).collect::<~[&str]>();
-        //println!("DEBUG header segs {:?}", segs);
+
         let version = match segs[0] {
             "HTTP/1.1"                  => HTTP_1_1,
             "HTTP/1.0"                  => HTTP_1_0,
@@ -429,8 +426,8 @@ impl<'a> Response<'a> {
         let status = from_str::<int>(segs[1]).unwrap();
         let reason = segs[2].trim_right();
 
-        println!("DEBUG HTTP version = {:?} status = {:?} reason = {:?}",
-                 version, status, reason);
+        debug!("Got HTTP Response version = {:?} status = {:?} reason = {:?}",
+               version, status, reason);
 
         let mut headers = HashMap::new();
         loop {
@@ -466,7 +463,7 @@ impl<'a> Response<'a> {
                 Some(v) => from_str::<uint>(*v.head().unwrap())
             }
         }
-        println!("DEBUG chunked={} length={}", chunked, length_opt);
+        debug!("HTTP Response chunked={} length={}", chunked, length_opt);
 
         Response { version: version, status: status, reason: reason.into_owned(),
                    headers: headers,
@@ -485,27 +482,47 @@ impl<'a> Response<'a> {
         ret
     }
 
-    fn _read_next_chunk_size(&mut self) -> uint {
-        let line = self.sock.read_line().unwrap();
-        println!("_read_next_chunk_size, line = {:?}", line);
-        let line = match line.find(';') {
-            Some(i) => line.slice(0, i).into_owned(),
-            None => line
-        };
+    fn read_next_chunk_size(&mut self) -> uint {
+        let mut line = ~"";
+        static MAXNUM_SIZE : uint = 16; // 16 hex digits
+        static HEX_CHARS : &'static str = "0123456789abcdefABCDEF";
+        let mut is_in_chunk_extension = false;
+        loop {
+            match self.sock.read_byte().unwrap() as char {
+                '\r'                            => {      // \r\n ends chunk size line
+                    let lf = self.sock.read_byte().unwrap() as char;
+                    assert_eq!(lf, '\n');
+                    break;
+                }
+                '\n'                            => {      // \n ends is dangerous
+                    warn!("http chunk transfer encoding format: LF without CR.");
+                    break;
+                }
+                _ if is_in_chunk_extension      => { continue; }
+                c if HEX_CHARS.contains_char(c) => { line.push_char(c); }
+                ';'                             => { is_in_chunk_extension = true; }
+                c                               => {
+                    fail!("malformat: reads={:?} next={:?}", line, c);
+                }
+            }
+        }
 
-        match from_str_radix(line.trim_right(), 16) {
+        if line.len() > MAXNUM_SIZE {
+            fail!("http chunk transfer encoding format: size line too long: {:?}", line);
+        }
+        debug!("read_next_chunk_size, line={:?} value={:?}", line, from_str_radix::<uint>(line, 16));
+
+        match from_str_radix(line, 16) {
             Some(v) => v,
-            None => fail!("wrong chunk size value")
+            None => fail!("wrong chunk size value: {:?}", line)
         }
     }
-
 }
 
 impl<'a> Reader for Response<'a> {
     fn read(&mut self, buf: &mut [u8]) -> IoResult<uint> {
         // read 1 chunk or less
-        //println!("DEBUG calls read()");
-        if self.chunked {       // TODO: handle Gzip
+        if self.chunked {
             match self.chunked_left {
                 Some(left) => {
                     let mut tbuf = vec::from_elem(left, 0u8);
@@ -527,9 +544,8 @@ impl<'a> Reader for Response<'a> {
                         }
                     }
                 }
-                None => {          // left == 0 or left is None
-                    let chunked_left = self._read_next_chunk_size();
-                    println!("1. chunked_left = {}", chunked_left);
+                None => {
+                    let chunked_left = self.read_next_chunk_size();
                     if chunked_left == 0 {
                         Err(io::standard_error(io::EndOfFile))
                     } else  {
