@@ -39,12 +39,6 @@ use collections::HashMap;
 pub use cookie::Cookie;
 pub use compress::GzipReader;
 
-pub mod cookie;
-pub mod compress;
-mod zlib;
-
-
-
 static USER_AGENT : &'static str = "Rust-http-helper/0.1dev";
 static HTTP_PORT : u16 = 80;
 
@@ -569,3 +563,12 @@ impl<'a> Reader for Response<'a> {
         }
     }
 }
+
+
+// mods
+// for Cookie impl
+pub mod cookie;
+// for GzipReader
+pub mod compress;
+// for IconvReader;
+pub mod iconv;

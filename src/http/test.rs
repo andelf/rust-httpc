@@ -4,6 +4,7 @@
 extern crate http;
 
 use http::*;
+use http::iconv::{IconvEncodable, IconvDecodable};
 
 fn dump_result(req: &Request, resp: &Response) {
     println!("\n======================= request result =======================");
@@ -26,6 +27,7 @@ fn test_cookie_processor() {
     let mut opener = build_opener();
     let mut resp = opener.open(&mut req).unwrap();
 
+    assert!(resp.read_to_end().is_ok());
     assert!(resp.get_headers("set-cookie").len() > 0);
 
     let url : Url = from_str("http://tieba.baidu.com/").unwrap();
@@ -33,6 +35,8 @@ fn test_cookie_processor() {
     let mut resp = opener.open(&mut req).unwrap();
 
     assert!(req.get_headers("cookie").len() > 0);
+    // FIXME: segment fault
+    // assert!(resp.read_to_end().is_ok());
 }
 
 
@@ -98,7 +102,7 @@ fn test_cookie_parse() {
 }
 
 #[test]
-fn test_post_request() {
+fn test_http_post_request() {
     let url = from_str("http://202.118.8.2:8080/book/queryOut.jsp").unwrap();
     let mut req = Request::new_with_url(&url);
     let mut h = HTTPHandler { debug : true };
@@ -125,7 +129,7 @@ fn test_post_request() {
 }
 
 #[test]
-fn test_options_request() {
+fn test_http_options_request() {
     let url = from_str("http://www.w3.org").unwrap();
     let mut req = Request::new_with_url(&url);
     req.method = OPTIONS;
@@ -136,33 +140,8 @@ fn test_options_request() {
     assert!(resp.headers.find(&~"Allow").is_some());
 }
 
-
-
-//#[test]
-// fn test_gzip_uncompress() {
-//     let url = from_str("http://www.baidu.com").unwrap();
-//     let mut req = Request::new_with_url(&url);
-//     req.add_header("Accept", "*/*");
-//     req.add_header("Accept-Encoding", "gzip,deflate,sdch");
-//     req.add_header("User-Agent", "Mozilla/5.0");
-//     let mut h = HTTPHandler { debug : true };
-//     let mut resp = h.handle(&mut req).unwrap();
-
-//     dump_result(&req, &resp);
-//     let content = resp.read_to_end().unwrap();
-//     //println!("| {:?}", content);
-//     println!("|uncompress => {:?}", compress::zlib_uncompress(content.slice(10, content.len()-8)));
-
-
-//     assert_eq!(resp.status, 200);
-//     assert!(false);
-
-// }
-
-
-
 #[test]
-fn test_head_request() {
+fn test_http_head_request() {
     let url = from_str("http://www.w3.org").unwrap();
     let mut req = Request::new_with_url(&url);
     req.method = HEAD;
@@ -211,4 +190,18 @@ fn test_weather_sug() {
 fn test_header_case() {
     assert_eq!(to_header_case("X-ForWard-For"), ~"X-Forward-For");
     assert_eq!(to_header_case("accept-encoding"), ~"Accept-Encoding");
+}
+
+#[test]
+fn test_iconv_encoder() {
+    let a = "哈哈";
+    assert_eq!(a.encode_with_encoding("gbk").unwrap(), ~[0xb9, 0xfe, 0xb9, 0xfe]);
+    let b = ~[0xe5, 0x93, 0x88, 0xe5, 0x93, 0x88];
+    assert_eq!(b.encode_with_encoding("gbk").unwrap(), ~[0xb9, 0xfe, 0xb9, 0xfe]);
+}
+
+#[test]
+fn test_iconv_decoder() {
+    let b = ~[0xb9, 0xfe, 0xb9, 0xfe];
+    assert_eq!(b.decode_with_encoding("gbk").unwrap(), ~"哈哈");
 }
