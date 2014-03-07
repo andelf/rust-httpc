@@ -8,6 +8,8 @@ use std::io::{BufReader, IoResult};
 use std::libc::*;
 #[allow(non_camel_case_types)]
 pub type iconv_t = *mut c_void;
+
+#[cfg(target_os = "macos")]
 #[link(name = "iconv")]
 extern "C" {
     fn iconv_open(__tocode: *c_schar, __fromcode: *c_schar) -> iconv_t;
@@ -17,6 +19,15 @@ extern "C" {
     fn iconv_close(__cd: iconv_t) -> c_int;
 }
 
+// iconv is part of linux glib
+#[cfg(target_os = "linux")]
+extern "C" {
+    fn iconv_open(__tocode: *c_schar, __fromcode: *c_schar) -> iconv_t;
+    fn iconv(__cd: iconv_t, __inbuf: *mut *mut c_schar,
+                 __inbytesleft: *mut size_t, __outbuf: *mut *mut c_schar,
+                 __outbytesleft: *mut size_t) -> size_t;
+    fn iconv_close(__cd: iconv_t) -> c_int;
+}
 /* automatically generated ends */
 
 pub struct IconvReader<R> {
