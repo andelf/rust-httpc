@@ -19,7 +19,7 @@ extern "C" {
     fn iconv_close(__cd: iconv_t) -> c_int;
 }
 
-// iconv is part of linux glib
+// iconv is part of linux glibc
 #[cfg(target_os = "linux")]
 extern "C" {
     fn iconv_open(__tocode: *c_schar, __fromcode: *c_schar) -> iconv_t;
@@ -121,4 +121,19 @@ impl<'a> IconvDecodable for &'a [u8] {
             Err(_)      => None,
         }
     }
+}
+
+
+#[test]
+fn test_encoder() {
+    let a = "哈哈";
+    assert_eq!(a.encode_with_encoding("gbk").unwrap(), ~[0xb9, 0xfe, 0xb9, 0xfe]);
+    let b = ~[0xe5, 0x93, 0x88, 0xe5, 0x93, 0x88];
+    assert_eq!(b.encode_with_encoding("gbk").unwrap(), ~[0xb9, 0xfe, 0xb9, 0xfe]);
+}
+
+#[test]
+fn test_decoder() {
+    let b = ~[0xb9, 0xfe, 0xb9, 0xfe];
+    assert_eq!(b.decode_with_encoding("gbk").unwrap(), ~"哈哈");
 }

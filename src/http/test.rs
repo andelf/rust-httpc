@@ -2,9 +2,11 @@
 #[allow(unused_mut)];
 
 extern crate http;
+extern crate test;
 
+use test::BenchHarness;
 use http::*;
-use http::iconv::{IconvEncodable, IconvDecodable};
+
 
 fn dump_result(req: &Request, resp: &Response) {
     println!("\n======================= request result =======================");
@@ -18,6 +20,21 @@ fn dump_result(req: &Request, resp: &Response) {
         println!("H {:?} => {:?}", k, vs)
     }
 }
+
+#[bench]
+fn bench_http_request_get_baidu(b: &mut BenchHarness) {
+    let url : Url = from_str("http://www.baidu.com").unwrap();
+    let mut req = Request::new_with_url(&url);
+
+    let mut opener = build_opener();
+
+    b.iter(|| {
+            let mut resp = opener.open(&mut req).unwrap();
+            assert!(resp.read_to_end().is_ok());
+        });
+}
+
+
 
 #[test]
 fn test_cookie_processor() {
@@ -153,19 +170,6 @@ fn test_http_head_request() {
 }
 
 #[test]
-fn test_yahoo_redirect_response() {
-    let url = from_str("http://www.yahoo.com.cn").unwrap();
-    let mut req = Request::new_with_url(&url);
-    //req.headers.find_or_insert(~"Accept-Encoding", ~[~"gzip,deflate,sdch"]);
-
-    let mut h = HTTPHandler { debug: true };
-    let mut resp = h.handle(&mut req).unwrap();
-
-    assert_eq!(resp.status, 301);
-}
-
-
-#[test]
 fn test_weather_sug() {
     let url : Url = from_str("http://toy1.weather.com.cn/search?cityname=yulin&_=2").unwrap();
 
@@ -184,24 +188,4 @@ fn test_weather_sug() {
     };
     assert!(content.len() > 10);
     assert!(resp.status == 200);
-}
-
-#[test]
-fn test_header_case() {
-    assert_eq!(to_header_case("X-ForWard-For"), ~"X-Forward-For");
-    assert_eq!(to_header_case("accept-encoding"), ~"Accept-Encoding");
-}
-
-#[test]
-fn test_iconv_encoder() {
-    let a = "哈哈";
-    assert_eq!(a.encode_with_encoding("gbk").unwrap(), ~[0xb9, 0xfe, 0xb9, 0xfe]);
-    let b = ~[0xe5, 0x93, 0x88, 0xe5, 0x93, 0x88];
-    assert_eq!(b.encode_with_encoding("gbk").unwrap(), ~[0xb9, 0xfe, 0xb9, 0xfe]);
-}
-
-#[test]
-fn test_iconv_decoder() {
-    let b = ~[0xb9, 0xfe, 0xb9, 0xfe];
-    assert_eq!(b.decode_with_encoding("gbk").unwrap(), ~"哈哈");
 }

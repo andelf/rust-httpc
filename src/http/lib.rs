@@ -564,8 +564,26 @@ impl<'a> Reader for Response<'a> {
     }
 }
 
+// ==================== tests
+#[test]
+fn test_header_case() {
+    assert_eq!(to_header_case("X-ForWard-For"), ~"X-Forward-For");
+    assert_eq!(to_header_case("accept-encoding"), ~"Accept-Encoding");
+}
 
-// mods
+#[test]
+fn test_http_redirect_response_yahoo() {
+    let url = from_str("http://www.yahoo.com.cn").unwrap();
+    let mut req = Request::new_with_url(&url);
+
+    let mut opener = build_opener();
+    let mut resp = opener.open(&mut req).unwrap();
+
+    assert_eq!(resp.status, 301);
+    assert!(resp.read_to_end().is_ok());
+}
+
+// ==================== pub mods
 // for Cookie impl
 pub mod cookie;
 // for GzipReader

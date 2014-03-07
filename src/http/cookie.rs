@@ -123,12 +123,22 @@ impl FromStr for Cookie {
 }
 
 
+#[test]
+fn test_cookie_parse_simple() {
+    let header = "ASPSESSIONIDQARTTCBD=JOACNNHAPHHFCFPGOFILBMJF; path=/";
+    let ck_opt = from_str::<Cookie>(header);
+    assert!(ck_opt.is_some());
+    let ck = ck_opt.unwrap();
+    assert_eq!(ck.to_header(), ~"ASPSESSIONIDQARTTCBD=JOACNNHAPHHFCFPGOFILBMJF");
+    assert_eq!(ck.path, Some(~"/"));
+}
 
-fn main() {
-    let expires = ~"Thu, 31-Dec-37 23:55:55 GMT";
-    let t = strptime(expires, "%a, %d-%b-%y %H:%M:%S %Z");
-    println!("tm = {:?}", t);
-    println!("=> {:?}", time::strftime("%a, %d-%b-%y %H:%M:%S %Z", &now_utc()));
-    let c = "BAIDUID=1AC4B89822952E9611807601CBC7FED4:FG=1; expires=Thu, 31-Dec-37 23:55:55 GMT; max-age=2147483647; path=/; domain=.baidu.com";
-    println!("got ck {:?}", from_str::<Cookie>(c).to_str());
+#[test]
+fn test_cookie_parse_normal() {
+    let header = "BAIDUID=1AC4B89822952E9611807601CBC7FED4:FG=1; expires=Thu, 31-Dec-37 23:55:55 GMT; max-age=2147483647; path=/; domain=.baidu.com";
+    let ck_opt = from_str::<Cookie>(header);
+    assert!(ck_opt.is_some());
+    let ck = ck_opt.unwrap();
+    assert_eq!(ck.to_header(), ~"BAIDUID=1AC4B89822952E9611807601CBC7FED4:FG=1");
+    assert!(!ck.is_expired());
 }
