@@ -19,6 +19,26 @@ fn dump_result(req: &Request, resp: &Response) {
 }
 
 #[test]
+fn test_cookie_processor() {
+    let url : Url = from_str("http://www.baidu.com").unwrap();
+    let mut req = Request::new_with_url(&url);
+
+    let mut opener = build_opener();
+    let mut resp = opener.open(&mut req).unwrap();
+
+    assert!(resp.get_headers("set-cookie").len() > 0);
+
+    let url : Url = from_str("http://tieba.baidu.com/").unwrap();
+    let mut req = Request::new_with_url(&url);
+    let mut resp = opener.open(&mut req).unwrap();
+
+    assert!(req.get_headers("cookie").len() > 0);
+}
+
+
+
+
+#[test]
 fn test_content_encoding_gzip() {
     let url = from_str("http://www.vervestudios.co/projects/compression-tests/static/js/test-libs/jquery.min.js?d=1394076086888&format=gzip").unwrap();
     let mut req = Request::new_with_url(&url);
@@ -50,9 +70,6 @@ fn test_content_encoding_deflate_zlib() {
     let ret = r.read_to_str();
     assert!(ret.unwrap().contains("jQuery JavaScript"));
 }
-
-
-
 
 #[test]
 fn test_cookie_parse() {

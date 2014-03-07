@@ -100,16 +100,31 @@ impl<'a> Request<'a> {
         self.content = body.into_owned();
     }
 
+    // clean old header add new header
+    pub fn set_header(&mut self, key: &str, value: &str) {
+        self.headers.insert(to_header_case(key),
+                            ~[value.into_owned()]);
+    }
+
+    // add new header value to exist value
     pub fn add_header(&mut self, key: &str, value: &str) {
         self.headers.insert_or_update_with(to_header_case(key),
                                            ~[value.into_owned()],
-                                           |_k,v| v[0] = value.into_owned()) ;
+                                           |_k,v| v.push(value.into_owned()));
+    }
+
+    pub fn get_headers(&self, header_name: &str) -> ~[~str] {
+        let mut ret : ~[~str] = ~[];
+        match self.headers.find(&to_header_case(header_name)) {
+            Some(hdrs) => for hdr in hdrs.iter() {
+                ret.push(hdr.clone())
+            },
+            _ => ()
+        }
+        ret
     }
 }
 
-// fn header_eq(a: &str, b: &str) -> bool {
-//     a.eq_ignore_ascii_case(b)
-// }
 pub fn to_header_case(key: &str) -> ~str {
     let mut ret = ~"";
     let mut flag_is_at_words_begin = true;
@@ -258,17 +273,12 @@ impl Handler for HTTPCookieProcessor {
         None
     }
     fn response(&mut self, req: &Request, resp: &mut Response) -> Option<Response> {
-        match resp.headers.find(&to_header_case("set-cookie")) {
-            Some(ck_headers) => {
-                for set_ck in ck_headers.iter() {
-                    let ck_opt = from_str::<Cookie>(*set_ck);
-                    if ck_opt.is_some() {
-                        let ck = ck_opt.unwrap();
-                        self.jar.set_cookie_if_ok(ck, req);
-                    }
-                }
-            },
-            None => ()
+        for cookie_header in resp.get_headers("set-cookie").iter() {
+            let ck_opt = from_str::<Cookie>(*cookie_header);
+            if ck_opt.is_some() {
+                let ck = ck_opt.unwrap();
+                self.jar.set_cookie_if_ok(ck, req);
+            }
         }
         None
     }
