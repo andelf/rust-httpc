@@ -488,28 +488,30 @@ impl<'a> Response<'a> {
         ret
     }
 
-    fn read_next_chunk_size(&mut self) -> uint {
+    fn read_next_chunk_size(&mut self) -> Option<uint> {
         let mut line = ~"";
         static MAXNUM_SIZE : uint = 16; // 16 hex digits
-        static HEX_CHARS : &'static str = "0123456789abcdefABCDEF";
+        static HEX_CHARS : &'static [u8] = bytes!("0123456789abcdefABCDEF");
         let mut is_in_chunk_extension = false;
         loop {
-            match self.sock.read_byte().unwrap() as char {
-                '\r'                            => {      // \r\n ends chunk size line
+            match self.sock.read_byte() {
+                Ok(0x0du8)                          => {      // \r\n ends chunk size line
                     let lf = self.sock.read_byte().unwrap() as char;
                     assert_eq!(lf, '\n');
                     break;
                 }
-                '\n'                            => {      // \n ends is dangerous
+                Ok(0x0au8)                          => {      // \n ends is dangerous
                     warn!("http chunk transfer encoding format: LF without CR.");
                     break;
                 }
-                _ if is_in_chunk_extension      => { continue; }
-                c if HEX_CHARS.contains_char(c) => { line.push_char(c); }
-                ';'                             => { is_in_chunk_extension = true; }
-                c                               => {
+                Ok(_) if is_in_chunk_extension      => { continue; }
+                Ok(c) if HEX_CHARS.contains(&c) => { line.push_char(c as char); }
+                // `;`
+                Ok(0x3bu8)                          => { is_in_chunk_extension = true; }
+                Ok(c)                               => {
                     fail!("malformat: reads={:?} next={:?}", line, c);
                 }
+                Err(_)                              => return None,
             }
         }
 
@@ -519,7 +521,7 @@ impl<'a> Response<'a> {
         debug!("read_next_chunk_size, line={:?} value={:?}", line, from_str_radix::<uint>(line, 16));
 
         match from_str_radix(line, 16) {
-            Some(v) => v,
+            Some(v) => Some(v),
             None => fail!("wrong chunk size value: {:?}", line)
         }
     }
@@ -556,11 +558,19 @@ impl<'a> Reader for Response<'a> {
             }
             None => {
                 let chunked_left = self.read_next_chunk_size();
-                if chunked_left == 0 {
-                    Err(io::standard_error(io::EndOfFile))
-                } else  {
-                    self.chunked_left = Some(chunked_left);
-                    Ok(0)
+                match chunked_left {
+                    Some(0) => {
+                        assert!(self.sock.read_bytes(2).is_ok());
+                        // assert!(self.sock.read_to_end().is_ok());
+                        Err(io::standard_error(io::EndOfFile))
+                    }
+                    Some(_) => {
+                        self.chunked_left = chunked_left;
+                        Ok(0)
+                    }
+                    None => {
+                        Err(io::standard_error(io::IoUnavailable))
+                    }
                 }
             }
         }

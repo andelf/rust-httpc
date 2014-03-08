@@ -35,6 +35,15 @@ fn bench_http_request_get_baidu(b: &mut BenchHarness) {
         });
 }
 
+#[test]
+fn test_http_response_reader_eof() {
+    let url : Url = from_str("http://www.baidu.com").unwrap();
+    let mut req = Request::new_with_url(&url);
+    let mut opener = build_opener();
+    let mut resp = opener.open(&mut req).unwrap();
+    assert!(resp.read_to_end().is_ok());
+    assert!(resp.read_to_end().is_err());
+}
 
 
 #[test]
