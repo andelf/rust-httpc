@@ -569,7 +569,7 @@ impl<'a> Reader for Response<'a> {
                         Ok(0)
                     }
                     None => {
-                        Err(io::standard_error(io::IoUnavailable))
+                        Err(io::standard_error(io::EndOfFile))
                     }
                 }
             }

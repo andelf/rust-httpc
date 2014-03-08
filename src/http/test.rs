@@ -42,7 +42,7 @@ fn test_http_response_reader_eof() {
     let mut opener = build_opener();
     let mut resp = opener.open(&mut req).unwrap();
     assert!(resp.read_to_end().is_ok());
-    assert!(resp.read_to_end().is_err());
+    assert_eq!(resp.read_to_end().unwrap(), ~[]);
 }
 
 
