@@ -16,11 +16,12 @@ fn dump_result(req: &Request, resp: &Response) {
     for (k, vs) in resp.headers.iter() {
         println!("H {:?} => {:?}", k, vs)
     }
+    println!("ends~");
 }
 
 
 fn main() {
-    let url : Url = from_str("http://www.google.com").unwrap();
+    let url : Url = from_str("http://www.baidu.com").unwrap();
     let mut req = Request::new_with_url(&url);
 
     //req.add_header("Accept-Encoding", "gzip,deflate");
@@ -32,19 +33,12 @@ fn main() {
 
     dump_result(&req, &resp);
 
-    println!("got cookies = {:?}", resp.get_headers("set-cookie"));
-    match resp.get_headers("Content-Encoding").head() {
-        Some(&~"gzip") => {
-            let mut gzreader = compress::GzipReader::new(resp);
-            println!("unzip => {:?}",  gzreader.read_to_str());
-        }
-        Some(&~"deflate") => {
-            let mut gzreader = compress::GzipReader::new(resp);
-            println!("unzip => {:?}",  gzreader.read_to_str());
-        }
-        None => {
-            println!("content => {:?}", resp.read_to_str());
-        }
-        _ => unreachable!()
-    }
+
+    let url : Url = from_str("http://video.baidu.com/").unwrap();
+    let mut req = Request::new_with_url(&url);
+    let mut resp = opener.open(&mut req).unwrap();
+
+    dump_result(&req, &resp);
+
+    assert!(resp.read_to_end().is_ok());
 }
