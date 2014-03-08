@@ -23,6 +23,8 @@ use std::io::IoResult;
 use std::str;
 use std::vec;
 
+use std::cmp::min;
+
 use std::fmt::{Show, Formatter, Result};
 
 // for to_ascii_lower, eq_ignore_ascii_case
@@ -525,41 +527,42 @@ impl<'a> Response<'a> {
 
 impl<'a> Reader for Response<'a> {
     fn read(&mut self, buf: &mut [u8]) -> IoResult<uint> {
-        // read 1 chunk or less
-        if self.chunked {
-            match self.chunked_left {
-                Some(left) => {
-                    let mut tbuf = vec::from_elem(left, 0u8);
-                    match self.sock.read(tbuf) {
-                        Ok(n) => {
-                            buf.move_from(tbuf, 0, n);
-                            if left - n == 0 { // this chunk ends
-                                // toss the CRLF at the end of the chunk
-                                assert!(self.sock.read_bytes(2).is_ok());
-                                self.chunked_left = None;
-                            } else {
-                                self.chunked_left = Some(left - n);
-                            }
-                            Ok(n)
+        if !self.chunked {
+            return self.sock.read(buf);
+        }
+        // read one chunk or less
+        match self.chunked_left {
+            Some(left) => {
+                let tbuf_len = min(buf.len(), left);
+                let mut tbuf = vec::from_elem(tbuf_len, 0u8);
+                match self.sock.read(tbuf) {
+                    Ok(nread) => {
+                        buf.move_from(tbuf, 0, nread);
+                        if left == nread {
+                            // this chunk ends
+                            // toss the CRLF at the end of the chunk
+                            assert!(self.sock.read_bytes(2).is_ok());
+                            self.chunked_left = None;
+                        } else {
+                            self.chunked_left = Some(left - nread);
                         }
-                        Err(e) => {
-                            println!("error read from sock: {}", e);
-                            Err(e)
-                        }
+                        Ok(nread)
                     }
-                }
-                None => {
-                    let chunked_left = self.read_next_chunk_size();
-                    if chunked_left == 0 {
-                        Err(io::standard_error(io::EndOfFile))
-                    } else  {
-                        self.chunked_left = Some(chunked_left);
-                        Ok(0)
+                    Err(e) => {
+                        println!("error read from sock: {}", e);
+                        Err(e)
                     }
                 }
             }
-        } else {
-            self.sock.read(buf)
+            None => {
+                let chunked_left = self.read_next_chunk_size();
+                if chunked_left == 0 {
+                    Err(io::standard_error(io::EndOfFile))
+                } else  {
+                    self.chunked_left = Some(chunked_left);
+                    Ok(0)
+                }
+            }
         }
     }
 }
