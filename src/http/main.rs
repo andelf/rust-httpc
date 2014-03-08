@@ -16,7 +16,6 @@ fn dump_result(req: &Request, resp: &Response) {
     for (k, vs) in resp.headers.iter() {
         println!("H {:?} => {:?}", k, vs)
     }
-    println!("ends~");
 }
 
 

@@ -30,6 +30,7 @@ fn bench_http_request_get_baidu(b: &mut BenchHarness) {
 
     b.iter(|| {
             let mut resp = opener.open(&mut req).unwrap();
+            assert!(resp.get_headers("set-cookie").len() > 0);
             assert!(resp.read_to_end().is_ok());
         });
 }
@@ -52,8 +53,8 @@ fn test_cookie_processor() {
     let mut resp = opener.open(&mut req).unwrap();
 
     assert!(req.get_headers("cookie").len() > 0);
-    // FIXME: segment fault
-    // assert!(resp.read_to_end().is_ok());
+
+    assert!(resp.read_to_end().is_ok());
 }
 
 

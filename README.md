@@ -14,7 +14,7 @@
 - HTTP chunked transfer encoding
 - simple HTTP CookieJar
 - HTTP gzip/deflate content encoding (partial, WIP, via zlib)
-- a Opener + Handler structure, extensible (like python urllib2)
+- Opener + Handler structure, extensible (like python urllib2)
 
 ## What is missing
 
@@ -37,7 +37,10 @@
 ### build test & run test
 
     $ rustc -L. --test src/http/test.rs
+    $ rustc --test src/http/lib.rs
     $ ./test
+    $ ./http
+    $ ./http --bench
 
 ### build sample program & run
 
