@@ -201,7 +201,7 @@ impl<R:Reader> Reader for IconvReader<R> {
                     self.tempbuf = tempbuf.slice(nwrite, temp_nwrite).into_owned();
                     match err {
                         EILSEQ => return Err(io::standard_error(io::InvalidInput)),
-                        _ => return Ok(nwrite);
+                        _ => return Ok(nwrite),
                     }
                 }
                 return Ok(nwrite);
