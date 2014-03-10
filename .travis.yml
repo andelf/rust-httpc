@@ -4,4 +4,6 @@ before_install:
 install:
   - sudo apt-get install rust-nightly
 script:
-  - rustc src/http/lib.rs
+  - rustc src/lib.rs
+  - rustc --test src/lib.rs
+  - ./http

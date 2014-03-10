@@ -246,19 +246,12 @@ pub struct GzipHandler {
 }
 
 impl Handler for GzipHandler {
-    fn request(&mut self, req: &mut Request) -> Option<Request> {
-        // req.set_header("Accept-Encoding", "gzip,deflate");
-        None
+    fn request(&mut self, _req: &mut Request) -> Option<Request> {
+        unimplemented!()
     }
 
-    fn response(&mut self, req: &Request, resp: &mut Response) -> Option<Response> {
-        // match resp.get_headers("Content-Encoding").head() {
-        //     Some(&~"gzip") => {
-        //         resp.sock = GzipReader::new(resp.sock.by_ref());
-        //     }
-        //     _ => ()
-        // }
-         None
+    fn response(&mut self, _req: &Request, _resp: &mut Response) -> Option<Response> {
+        unimplemented!()
     }
 
     fn handle_order(&self) -> int {
@@ -604,18 +597,6 @@ impl<'a> Reader for Response<'a> {
 fn test_header_case() {
     assert_eq!(to_header_case("X-ForWard-For"), ~"X-Forward-For");
     assert_eq!(to_header_case("accept-encoding"), ~"Accept-Encoding");
-}
-
-#[test]
-fn test_http_redirect_response_yahoo() {
-    let url = from_str("http://www.yahoo.com.cn").unwrap();
-    let mut req = Request::new_with_url(&url);
-
-    let mut opener = build_opener();
-    let mut resp = opener.open(&mut req).unwrap();
-
-    assert_eq!(resp.status, 301);
-    assert!(resp.read_to_end().is_ok());
 }
 
 // ==================== pub mods

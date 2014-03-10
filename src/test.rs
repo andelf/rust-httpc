@@ -199,3 +199,15 @@ fn test_weather_sug() {
     assert!(content.len() > 10);
     assert!(resp.status == 200);
 }
+
+#[test]
+fn test_http_redirect_response_yahoo() {
+    let url = from_str("http://www.yahoo.com.cn").unwrap();
+    let mut req = Request::new_with_url(&url);
+
+    let mut opener = build_opener();
+    let mut resp = opener.open(&mut req).unwrap();
+
+    assert_eq!(resp.status, 301);
+    assert!(resp.read_to_end().is_ok());
+}

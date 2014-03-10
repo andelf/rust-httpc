@@ -1,5 +1,7 @@
 # rust-http-helper
 
+FIXME: crate name use ``http``.
+
 ## A http client lib.
 
 - Working in progress.
@@ -8,12 +10,12 @@
 
 ## Support following:
 
-- fundamental HTTP/1.0 HTTP/1.1 (partial)
+- Fundamental HTTP/1.0 HTTP/1.1 (partial)
 - HTTP method: GET/POST/PUT ...
 - HTTP headers (set/get)
 - HTTP chunked transfer encoding
-- simple HTTP CookieJar
-- HTTP gzip/deflate content encoding (partial, WIP, via zlib)
+- Simple HTTP CookieJar
+- HTTP gzip/deflate content encoding (partial, via zlib, working in progress)
 - Opener + Handler structure, extensible (like python urllib2)
 
 ## What is missing
