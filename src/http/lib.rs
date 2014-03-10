@@ -246,9 +246,24 @@ pub struct GzipHandler {
 }
 
 impl Handler for GzipHandler {
-    // fn response(&mut self, _req: Request, _resp: Response) -> Option<Response> {
-    //     None
-    // }
+    fn request(&mut self, req: &mut Request) -> Option<Request> {
+        // req.set_header("Accept-Encoding", "gzip,deflate");
+        None
+    }
+
+    fn response(&mut self, req: &Request, resp: &mut Response) -> Option<Response> {
+        // match resp.get_headers("Content-Encoding").head() {
+        //     Some(&~"gzip") => {
+        //         resp.sock = GzipReader::new(resp.sock.by_ref());
+        //     }
+        //     _ => ()
+        // }
+         None
+    }
+
+    fn handle_order(&self) -> int {
+        300
+    }
 }
 
 pub struct HTTPCookieProcessor {
@@ -413,7 +428,9 @@ pub struct Response<'a> {
     priv chunked_left: Option<uint>,
     priv length: Option<uint>,
     // make sock a owned Buffer
-    priv sock: ~Buffer // BufferedStream<TcpStream>
+    priv sock: ~Buffer,
+    priv eof: bool,
+
 }
 
 impl<'a> Response<'a> {
@@ -474,7 +491,7 @@ impl<'a> Response<'a> {
         Response { version: version, status: status, reason: reason.into_owned(),
                    headers: headers,
                    chunked: chunked, chunked_left: None, length: length_opt,
-                   sock: stream as ~Buffer, }
+                   sock: stream as ~Buffer, eof: false}
     }
 
     pub fn get_headers(&self, header_name: &str) -> ~[~str] {
@@ -529,6 +546,9 @@ impl<'a> Response<'a> {
 
 impl<'a> Reader for Response<'a> {
     fn read(&mut self, buf: &mut [u8]) -> IoResult<uint> {
+        if self.eof {
+            return Err(io::standard_error(io::EndOfFile))
+        }
         if !self.chunked {
             return self.sock.read(buf);
         }
@@ -561,6 +581,7 @@ impl<'a> Reader for Response<'a> {
                 match chunked_left {
                     Some(0) => {
                         assert!(self.sock.read_bytes(2).is_ok());
+                        self.eof = true;
                         // assert!(self.sock.read_to_end().is_ok());
                         Err(io::standard_error(io::EndOfFile))
                     }
@@ -569,6 +590,7 @@ impl<'a> Reader for Response<'a> {
                         Ok(0)
                     }
                     None => {
+                        self.eof = true;
                         Err(io::standard_error(io::EndOfFile))
                     }
                 }
