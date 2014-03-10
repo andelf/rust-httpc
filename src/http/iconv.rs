@@ -130,7 +130,6 @@ impl<R:Reader> IconvReader<R> {
 
     fn fill_buf(&mut self) {
         if self.read_pos > 0 {
-            let nremain_unread = self.write_pos - self.read_pos;
             unsafe {
                 ptr::copy_memory::<u8>(self.buf.as_mut_ptr(),
                                        cast::transmute(self.buf.unsafe_mut_ref(self.read_pos)),
