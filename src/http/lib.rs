@@ -587,7 +587,7 @@ impl<'a> Reader for Response<'a> {
                     }
                     Some(_) => {
                         self.chunked_left = chunked_left;
-                        Ok(0)
+                        return self.read(buf); // recursive call once, istead of Ok(0)
                     }
                     None => {
                         self.eof = true;
