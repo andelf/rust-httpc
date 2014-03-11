@@ -21,7 +21,7 @@ fn dump_result(req: &Request, resp: &Response) {
 
 fn main() {
     let url : Url = from_str("http://www.baidu.com").unwrap();
-    let mut req = Request::new_with_url(&url);
+    let mut req = Request::with_url(&url);
 
     //req.add_header("Accept-Encoding", "gzip,deflate");
     //req.method = POST;
@@ -34,7 +34,7 @@ fn main() {
 
 
     let url : Url = from_str("http://video.baidu.com/").unwrap();
-    let mut req = Request::new_with_url(&url);
+    let mut req = Request::with_url(&url);
     let mut resp = opener.open(&mut req).unwrap();
 
     dump_result(&req, &resp);

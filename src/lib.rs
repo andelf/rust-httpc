@@ -32,8 +32,9 @@ use std::ascii::StrAsciiExt;
 //use std::ascii::AsciiStr;
 use std::num::from_str_radix;
 
-//use extra::url::{Url, query_to_str};
+/// urlencode to encode querys
 pub use urlencode = extra::url::query_to_str;
+/// Url implementation
 pub use extra::url::Url;
 
 use collections::HashMap;
@@ -81,7 +82,7 @@ pub struct Request<'a> {
 }
 
 impl<'a> Request<'a> {
-    pub fn new_with_url(uri: &Url) -> Request {
+    pub fn with_url(uri: &Url) -> Request {
         // fix empty path
         let mut uri = uri.clone();
         if uri.path == ~"" {
@@ -236,7 +237,7 @@ impl Handler for HTTPHandler {
 
         stream.flush();
 
-        Some(Response::new_with_stream(&read_stream))
+        Some(Response::with_stream(&read_stream))
     }
 }
 
@@ -427,7 +428,7 @@ pub struct Response<'a> {
 }
 
 impl<'a> Response<'a> {
-    pub fn new_with_stream(s: &'a TcpStream) -> Response {
+    pub fn with_stream(s: &'a TcpStream) -> Response {
         let mut stream = ~BufferedReader::new(s.clone());
 
         let line = stream.read_line().unwrap(); // status line
@@ -604,5 +605,3 @@ fn test_header_case() {
 pub mod cookie;
 // for GzipReader
 pub mod compress;
-// for IconvReader;
-pub mod iconv;

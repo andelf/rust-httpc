@@ -1,9 +1,8 @@
-
 .PHONY: all
 
 
 all:
-	rustc -g src/http/lib.rs
-	rustc -g --test src/http/lib.rs
-	rustc -g -L. --test src/http/test.rs
-	rustc -g -L. src/http/main.rs
+	rustc -g2 src/lib.rs
+	rustc -g2 --test src/lib.rs
+	rustc -g2 -L. --test src/test.rs
+	rustc -g2 -L. src/main.rs
