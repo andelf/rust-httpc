@@ -426,15 +426,18 @@ pub struct Response<'a> {
     priv chunked_left: Option<uint>,
     length: Option<uint>,
     priv length_left: uint,
-    // make sock a owned Buffer
-    priv sock: &'a mut Buffer,
+    // make sock a owned TcpStream
+    // FIXME: maybe a rust bug here
+    // when using Buffer/Reader traits here, program will hangs at main() ends
+    // gdb shows that epoll_wait with timeout=-1, and pthread_cond_wait()
+    priv sock: ~TcpStream,
     priv eof: bool,
 
 }
 
 impl<'a> Response<'a> {
-    pub fn with_stream(s: &'a TcpStream) -> Response {
-        let mut stream = ~BufferedReader::new(s.clone());
+    pub fn with_stream(s: &TcpStream) -> Response {
+        let mut stream = BufferedReader::with_capacity(1, s.clone());
 
         let line = stream.read_line().unwrap(); // status line
         let segs = line.splitn(' ', 2).collect::<~[&str]>();
@@ -492,7 +495,7 @@ impl<'a> Response<'a> {
                    headers: headers,
                    chunked: chunked, chunked_left: None,
                    length: length, length_left: length.unwrap_or(0),
-                   sock: stream as ~Buffer, eof: false }
+                   sock: ~s.clone(), eof: false }
     }
 
     pub fn get_headers(&self, header_name: &str) -> ~[~str] {
@@ -619,7 +622,6 @@ impl<'a> Reader for Response<'a> {
         }
     }
 }
-
 
 // for Cookie impl
 pub mod cookie;
