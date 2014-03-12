@@ -134,13 +134,11 @@ fn test_http_post_request() {
     let url = from_str("http://202.118.8.2:8080/book/queryOut.jsp").unwrap();
     let mut req = Request::with_url(&url);
 
-    let mut h = HTTPHandler { debug : true };
-
     req.method = POST;
     req.add_body(bytes!("kind=simple&type=title&word=erlang&match=mh&recordtype=01&library_id=all&x=40&y=10"));
 
-    h.request(&mut req);
-    let mut resp = h.handle(&mut req).unwrap();
+    let mut opener = build_opener();
+    let mut resp = opener.open(&mut req).unwrap();
 
     dump_result(&req, &resp);
     // charset = gbk
@@ -163,10 +161,9 @@ fn test_http_options_request() {
     let url = from_str("http://www.w3.org").unwrap();
     let mut req = Request::with_url(&url);
     req.method = OPTIONS;
-    let mut h = HTTPHandler { debug : true };
 
-    h.request(&mut req);
-    let mut resp = h.handle(&mut req).unwrap();
+    let mut opener = build_opener();
+    let mut resp = opener.open(&mut req).unwrap();
 
     assert_eq!(resp.status, 200);
     assert!(resp.get_headers("Allow").len() > 0);
@@ -178,10 +175,12 @@ fn test_http_head_request() {
     let mut req = Request::with_url(&url);
     req.method = HEAD;
 
-    let mut h = HTTPHandler { debug : true };
-    h.request(&mut req);
-    let mut resp = h.handle(&mut req).unwrap();
+    let mut opener = build_opener();
+    let mut resp = opener.open(&mut req).unwrap();
 
+    println!("resp => {:?}", resp);
+
+    println!("resp.read_to_end() => {:?}", resp.read_to_end());
     assert_eq!(resp.read_to_end().unwrap().len(), 0);
     assert_eq!(resp.status, 200);
 }
@@ -193,9 +192,8 @@ fn test_weather_sug() {
     let mut req = Request::with_url(&url);
     req.headers.find_or_insert(~"Referer", ~[~"http://www.weather.com.cn/"]);
 
-    let mut h = HTTPHandler { debug: true };
-    h.request(&mut req);
-    let mut resp = h.handle(&mut req).unwrap();
+    let mut opener = build_opener();
+    let mut resp = opener.open(&mut req).unwrap();
 
     let content = match resp.read_to_str() {
         Ok(content) => {

@@ -44,7 +44,7 @@ pub use cookie::Cookie;
 static USER_AGENT : &'static str = "Rust-http-helper/0.1dev";
 static HTTP_PORT : u16 = 80;
 
-#[deriving(Show)]
+#[deriving(Eq, Show)]
 pub enum HttpMethod {
     OPTIONS,
     GET,
@@ -119,6 +119,44 @@ impl<'a> Request<'a> {
         }
         ret
     }
+
+    pub fn write_request(&self, w: &mut Writer) -> IoResult<()> {
+        // METHOD /path HTTP/v.v
+        w.write_str(self.method.to_str());
+
+        w.write_char(' ');
+        w.write_str(self.uri.path);
+        if !self.uri.query.is_empty() {
+            w.write_char('?');
+            w.write_str(urlencode(&self.uri.query));
+        }
+
+        w.write_str(" ");
+        w.write_str(self.version.to_str());
+        w.write_str("\r\n");
+
+        // headers
+        for (k, vs) in self.headers.iter() {
+            w.write_str(*k);
+            w.write_str(": ");
+            for (i, v) in vs.iter().enumerate() {
+                w.write_str(*v);
+                // FIXME: multi-value header line
+                if i > 0 { w.write_str("; "); }
+            }
+            w.write_str("\r\n");
+        }
+
+        w.write_str("\r\n");
+
+        match self.method {
+            POST | PUT => w.write(self.content),
+            _ => Ok(())
+        };
+
+        w.flush();
+        Ok(())
+    }
 }
 
 pub fn to_header_case(key: &str) -> ~str {
@@ -140,9 +178,8 @@ pub fn to_header_case(key: &str) -> ~str {
 
 #[allow(unused_variable)]
 pub trait Handler {
-    fn request(&mut self, req: &mut Request) -> Option<Request> { None }
-    fn response(&mut self, req: &Request, resp: &mut Response) -> Option<Response> { None }
-    fn handle(&mut self, req: &mut Request) -> Option<Response> { None }
+    fn before_request(&mut self, req: &mut Request) -> Option<Request> { None }
+    fn after_response(&mut self, req: &Request, resp: &mut Response) -> Option<Response> { None }
 
     fn handle_order(&self) -> int { 100 }
 }
@@ -160,8 +197,7 @@ impl HTTPHandler {
 }
 
 impl Handler for HTTPHandler {
-    // TODO after request: error handling
-    fn request(&mut self, req: &mut Request) -> Option<Request> {
+    fn before_request(&mut self, req: &mut Request) -> Option<Request> {
         let uri = req.uri.clone();
         let host = uri.port.map_or(req.uri.host.clone(),
                                    |p| format!("{}:{}", req.uri.host, p));
@@ -185,54 +221,6 @@ impl Handler for HTTPHandler {
         None
     }
 
-    fn handle(&mut self, req: &mut Request) -> Option<Response> {
-        let uri = req.uri.clone();
-
-        let ips = get_host_addresses(uri.host).unwrap();
-        let port = uri.port.clone().and_then(|p| from_str(p)).unwrap_or(HTTP_PORT);
-
-        let addr = SocketAddr { ip: ips.head().unwrap().clone(), port: port };
-
-        let mut stream = TcpStream::connect(addr).unwrap();
-
-        // METHOD /path HTTP/v.v
-        stream.write_str(req.method.to_str());
-
-        stream.write_char(' ');
-        stream.write_str(uri.path);
-        if !uri.query.is_empty() {
-            stream.write_char('?');
-            stream.write_str(urlencode(&uri.query));
-        }
-
-        stream.write_str(" ");
-        stream.write_str(req.version.to_str());
-
-        stream.write_str("\r\n");
-
-        // headers
-        for (k, vs) in req.headers.iter() {
-            stream.write_str(*k);
-            stream.write_str(": ");
-            for (i, v) in vs.iter().enumerate() {
-                stream.write_str(*v);
-                // FIXME: multi-value header line
-                if i > 0 { stream.write_str("; "); }
-            }
-            stream.write_str("\r\n");
-        }
-
-        stream.write_str("\r\n");
-
-        match req.method {
-            POST | PUT => stream.write(req.content),
-            _ => Ok(())
-        };
-
-        stream.flush();
-
-        Some(Response::with_stream(&stream))
-    }
 }
 
 
@@ -274,13 +262,13 @@ impl HTTPCookieProcessor {
 }
 
 impl Handler for HTTPCookieProcessor {
-    fn request(&mut self, req: &mut Request) -> Option<Request> {
+    fn before_request(&mut self, req: &mut Request) -> Option<Request> {
         for ck in self.jar.cookies_for_request(req).iter() {
             req.add_header("Cookie", ck.to_header());
         }
         None
     }
-    fn response(&mut self, req: &Request, resp: &mut Response) -> Option<Response> {
+    fn after_response(&mut self, req: &Request, resp: &mut Response) -> Option<Response> {
         for cookie_header in resp.get_headers("set-cookie").iter() {
             let ck_opt = from_str::<Cookie>(*cookie_header);
             if ck_opt.is_some() {
@@ -297,7 +285,7 @@ impl Handler for HTTPCookieProcessor {
 
 
 pub struct OpenDirector {
-    handlers: ~[~Handler]
+    handlers: ~[~Handler],
 }
 
 impl OpenDirector {
@@ -305,22 +293,35 @@ impl OpenDirector {
         OpenDirector { handlers:
                        ~[~HTTPHandler::new()         as ~Handler,
                          ~HTTPCookieProcessor::new() as ~Handler,
-                         ]
+                         ],
         }
     }
     pub fn open(&mut self, req: &mut Request) -> Option<Response> {
         self.handlers.sort_by(|h1,h2| h1.handle_order().cmp(&h2.handle_order()));
         for hd in self.handlers.mut_iter() {
-            hd.request(req);
+            hd.before_request(req);
         }
 
-        let mut resp : Response = {
-            let hd = &mut self.handlers[0];
-            hd.handle(req).unwrap()
-        };
-        for hd in self.handlers.mut_iter() {
-            hd.response(req, &mut resp);
+        let uri = req.uri.clone();
+        let port = uri.port.clone().and_then(|p| from_str(p)).unwrap_or(HTTP_PORT);
+        let ips = get_host_addresses(uri.host).unwrap();
+        let addr = SocketAddr { ip: ips.head().unwrap().clone(), port: port };
+
+        let mut stream = TcpStream::connect(addr).unwrap();
+
+        req.write_request(&mut stream);
+
+        let mut resp = Response::with_stream(&stream);
+        // FIXME: this is ugly
+        if req.method == HEAD {
+            // HEAD req has content-length response header, but no payload
+            resp.eof = true;
         }
+
+        for hd in self.handlers.mut_iter() {
+            hd.after_response(req, &mut resp);
+        }
+
         Some(resp)
     }
 }
@@ -423,7 +424,8 @@ pub struct Response<'a> {
 
     priv chunked: bool,
     priv chunked_left: Option<uint>,
-    priv length: Option<uint>,
+    length: Option<uint>,
+    priv length_left: uint,
     // make sock a owned Buffer
     priv sock: &'a mut Buffer,
     priv eof: bool,
@@ -476,19 +478,21 @@ impl<'a> Response<'a> {
             }
         }
 
-        let mut length_opt = None;
+        let mut length = None;
         if !chunked {
-            length_opt = match headers.find(&"Content-Length".to_ascii_lower()) {
+            length = match headers.find(&"Content-Length".to_ascii_lower()) {
                 None => None,
-                Some(v) => from_str::<uint>(*v.head().unwrap())
+                Some(v) => from_str::<uint>(*v.head().unwrap()),
             }
         }
-        debug!("HTTP Response chunked={} length={}", chunked, length_opt);
+
+        debug!("HTTP Response chunked={} length={}", chunked, length);
 
         Response { version: version, status: status, reason: reason.into_owned(),
                    headers: headers,
-                   chunked: chunked, chunked_left: None, length: length_opt,
-                   sock: stream as ~Buffer, eof: false}
+                   chunked: chunked, chunked_left: None,
+                   length: length, length_left: length.unwrap_or(0),
+                   sock: stream as ~Buffer, eof: false }
     }
 
     pub fn get_headers(&self, header_name: &str) -> ~[~str] {
@@ -536,7 +540,7 @@ impl<'a> Response<'a> {
 
         match from_str_radix(line, 16) {
             Some(v) => Some(v),
-            None => fail!("wrong chunk size value: {:?}", line)
+            None => fail!("wrong chunk size value: {:?}", line),
         }
     }
 }
@@ -547,8 +551,29 @@ impl<'a> Reader for Response<'a> {
             return Err(io::standard_error(io::EndOfFile));
         }
         if !self.chunked {
-            return self.sock.read(buf);
+            if self.length.is_none() {
+                warn!("No content length header set!");
+                return self.sock.read(buf);
+            }
+            if self.length_left == 0 {
+                self.eof = true;
+                return Err(io::standard_error(io::EndOfFile));
+            } else if self.length_left > 0 {
+                match self.sock.read(buf) {
+                    Ok(n)  => {
+                        self.length_left -= n;
+                        return Ok(n);
+                    }
+                    Err(e) => {
+                        warn!("error while reading {} bytes: {:}", self.length_left, e);
+                        return Err(io::standard_error(io::InvalidInput));
+                    }
+                }
+            } else {
+                unreachable!()
+            }
         }
+
         // read one chunk or less
         match self.chunked_left {
             Some(left) => {
