@@ -195,8 +195,6 @@ impl Handler for HTTPHandler {
 
         let mut stream = TcpStream::connect(addr).unwrap();
 
-        let mut read_stream = stream.clone();
-
         // METHOD /path HTTP/v.v
         stream.write_str(req.method.to_str());
 
@@ -231,9 +229,9 @@ impl Handler for HTTPHandler {
             _ => Ok(())
         };
 
-        //stream.flush();
+        stream.flush();
 
-        Some(Response::with_stream(&read_stream))
+        Some(Response::with_stream(&stream))
     }
 }
 
