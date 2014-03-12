@@ -40,4 +40,6 @@ fn main() {
     dump_result(&req, &resp);
 
     assert!(resp.read_to_end().is_ok());
+
+    println!("ends");
 }

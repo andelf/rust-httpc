@@ -17,7 +17,7 @@ use std::io;
 use std::io::net::addrinfo::get_host_addresses;
 use std::io::net::ip::SocketAddr;
 use std::io::net::tcp::TcpStream;
-use std::io::{BufferedReader,BufferedWriter};
+use std::io::BufferedReader;
 use std::io::IoResult;
 
 use std::str;
@@ -40,7 +40,6 @@ pub use extra::url::Url;
 use collections::HashMap;
 
 pub use cookie::Cookie;
-pub use compress::GzipReader;
 
 static USER_AGENT : &'static str = "Rust-http-helper/0.1dev";
 static HTTP_PORT : u16 = 80;
@@ -99,20 +98,20 @@ impl<'a> Request<'a> {
 
     // clean old header add new header
     pub fn set_header(&mut self, key: &str, value: &str) {
-        self.headers.insert(to_header_case(key),
+        self.headers.insert(key.to_ascii_lower(),
                             ~[value.into_owned()]);
     }
 
     // add new header value to exist value
     pub fn add_header(&mut self, key: &str, value: &str) {
-        self.headers.insert_or_update_with(to_header_case(key),
+        self.headers.insert_or_update_with(key.to_ascii_lower(),
                                            ~[value.into_owned()],
                                            |_k,v| v.push(value.into_owned()));
     }
 
     pub fn get_headers(&self, header_name: &str) -> ~[~str] {
         let mut ret : ~[~str] = ~[];
-        match self.headers.find(&to_header_case(header_name)) {
+        match self.headers.find(&header_name.to_ascii_lower()) {
             Some(hdrs) => for hdr in hdrs.iter() {
                 ret.push(hdr.clone())
             },
@@ -166,20 +165,20 @@ impl Handler for HTTPHandler {
         let uri = req.uri.clone();
         let host = uri.port.map_or(req.uri.host.clone(),
                                    |p| format!("{}:{}", req.uri.host, p));
-        req.headers.find_or_insert(~"Host", ~[host]);
+        req.headers.find_or_insert(~"host", ~[host]);
 
-        req.headers.find_or_insert(~"User-Agent", ~[USER_AGENT.into_owned()]);
+        req.headers.find_or_insert(~"user-agent", ~[USER_AGENT.into_owned()]);
 
         // not support x-gzip or x-deflate.
-        req.headers.find_or_insert(~"Accept-Encoding", ~[~"identity"]);
+        req.headers.find_or_insert(~"accept-encoding", ~[~"identity"]);
 
         // not support keep-alive connection
-        req.headers.find_or_insert(~"Connection", ~[~"close"]);
+        req.headers.find_or_insert(~"connection", ~[~"close"]);
 
         match req.method {
             POST | PUT => {
-                req.headers.find_or_insert(~"Content-Length", ~[req.content.len().to_str()]);
-                req.headers.find_or_insert(~"Content-Type", ~[~"application/x-www-form-urlencoded"]);
+                req.headers.find_or_insert(~"content-length", ~[req.content.len().to_str()]);
+                req.headers.find_or_insert(~"content-type", ~[~"application/x-www-form-urlencoded"]);
             },
             _          => (),
         }
@@ -187,9 +186,6 @@ impl Handler for HTTPHandler {
     }
 
     fn handle(&mut self, req: &mut Request) -> Option<Response> {
-        // DEBUG
-        self.request(req);
-
         let uri = req.uri.clone();
 
         let ips = get_host_addresses(uri.host).unwrap();
@@ -197,9 +193,9 @@ impl Handler for HTTPHandler {
 
         let addr = SocketAddr { ip: ips.head().unwrap().clone(), port: port };
 
-        let stream = TcpStream::connect(addr).unwrap();
-        let read_stream = stream.clone();
-        let mut stream = BufferedWriter::new(stream);
+        let mut stream = TcpStream::connect(addr).unwrap();
+
+        let mut read_stream = stream.clone();
 
         // METHOD /path HTTP/v.v
         stream.write_str(req.method.to_str());
@@ -235,30 +231,39 @@ impl Handler for HTTPHandler {
             _ => Ok(())
         };
 
-        stream.flush();
+        //stream.flush();
 
         Some(Response::with_stream(&read_stream))
     }
 }
 
 
-pub struct GzipHandler {
-    debug: bool
-}
+// pub struct CompressHandler<'a> {
+//     debug: bool
+// }
 
-impl Handler for GzipHandler {
-    fn request(&mut self, _req: &mut Request) -> Option<Request> {
-        unimplemented!()
-    }
+// impl<'a> Handler for CompressHandler<'a> {
+//     fn request(&mut self, req: &mut Request) -> Option<Request> {
+//         req.set_header("Accept-Encoding", "gzip,deflate");
+//         None
+//     }
 
-    fn response(&mut self, _req: &Request, _resp: &mut Response) -> Option<Response> {
-        unimplemented!()
-    }
+//     fn response(&mut self, req: &Request, resp: &mut Response) -> Option<Response> {
+//         match resp.get_headers("Content-Encoding").head() {
+//             Some(&~"gzip") => {
+//                 let gzreader = compress::GzipReaderWrapper::new(resp.sock);
+//                 let mut bufreader = io::BufferedReader::new(gzreader);
+//                 resp.sock = &mut bufreader as &mut Buffer;
+//             }
+//             _ => ()
+//         }
+//         None
+//     }
 
-    fn handle_order(&self) -> int {
-        300
-    }
-}
+//     fn handle_order(&self) -> int {
+//         300
+//     }
+// }
 
 pub struct HTTPCookieProcessor {
     jar: CookieJar
@@ -362,7 +367,7 @@ impl CookieJar {
         }
     }
     pub fn process_response(&mut self, req: &Request, resp: &Response) {
-        for set_ck in resp.headers.get(&to_header_case("set-cookie")).iter() {
+        for set_ck in resp.get_headers("Set-Cookie".to_ascii_lower()).iter() {
             let ck_opt = from_str::<Cookie>(*set_ck);
             assert!(ck_opt.is_some());
             let ck = ck_opt.unwrap();
@@ -422,7 +427,7 @@ pub struct Response<'a> {
     priv chunked_left: Option<uint>,
     priv length: Option<uint>,
     // make sock a owned Buffer
-    priv sock: ~Buffer,
+    priv sock: &'a mut Buffer,
     priv eof: bool,
 
 }
@@ -453,7 +458,7 @@ impl<'a> Response<'a> {
             if segs.len() == 2 {
                 let k = segs[0];
                 let v = segs[1].trim();
-                headers.insert_or_update_with(to_header_case(k), ~[v.into_owned()],
+                headers.insert_or_update_with(k.to_ascii_lower(), ~[v.into_owned()],
                                               |_k, ov| ov.push(v.into_owned()));
             } else {
                 if [~"\r\n", ~"\n", ~""].contains(&line) {
@@ -475,7 +480,7 @@ impl<'a> Response<'a> {
 
         let mut length_opt = None;
         if !chunked {
-            length_opt = match headers.find(&to_header_case("content-length")) {
+            length_opt = match headers.find(&"Content-Length".to_ascii_lower()) {
                 None => None,
                 Some(v) => from_str::<uint>(*v.head().unwrap())
             }
@@ -490,7 +495,7 @@ impl<'a> Response<'a> {
 
     pub fn get_headers(&self, header_name: &str) -> ~[~str] {
         let mut ret : ~[~str] = ~[];
-        match self.headers.find(&to_header_case(header_name)) {
+        match self.headers.find(&header_name.to_ascii_lower()) {
             Some(hdrs) => for hdr in hdrs.iter() {
                 ret.push(hdr.clone())
             },
@@ -541,7 +546,7 @@ impl<'a> Response<'a> {
 impl<'a> Reader for Response<'a> {
     fn read(&mut self, buf: &mut [u8]) -> IoResult<uint> {
         if self.eof {
-            return Err(io::standard_error(io::EndOfFile))
+            return Err(io::standard_error(io::EndOfFile));
         }
         if !self.chunked {
             return self.sock.read(buf);
@@ -565,7 +570,7 @@ impl<'a> Reader for Response<'a> {
                         Ok(nread)
                     }
                     Err(e) => {
-                        println!("error read from sock: {}", e);
+                        error!("error read from sock: {}", e);
                         Err(e)
                     }
                 }
@@ -576,12 +581,11 @@ impl<'a> Reader for Response<'a> {
                     Some(0) => {
                         assert!(self.sock.read_bytes(2).is_ok());
                         self.eof = true;
-                        // assert!(self.sock.read_to_end().is_ok());
                         Err(io::standard_error(io::EndOfFile))
                     }
                     Some(_) => {
                         self.chunked_left = chunked_left;
-                        return self.read(buf); // recursive call once, istead of Ok(0)
+                        self.read(buf) // recursive call once, istead of Ok(0)
                     }
                     None => {
                         self.eof = true;
@@ -593,15 +597,20 @@ impl<'a> Reader for Response<'a> {
     }
 }
 
-// ==================== tests
-#[test]
-fn test_header_case() {
-    assert_eq!(to_header_case("X-ForWard-For"), ~"X-Forward-For");
-    assert_eq!(to_header_case("accept-encoding"), ~"Accept-Encoding");
-}
 
-// ==================== pub mods
 // for Cookie impl
 pub mod cookie;
 // for GzipReader
 pub mod compress;
+
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_header_case() {
+        assert_eq!(to_header_case("X-ForWard-For"), ~"X-Forward-For");
+        assert_eq!(to_header_case("accept-encoding"), ~"Accept-Encoding");
+    }
+}
