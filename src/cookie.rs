@@ -80,9 +80,9 @@ impl FromStr for Cookie {
         for seg in segs.collect::<~[&str]>().iter() {
             if seg.find('=').is_some() {
                 let kv = seg.trim().splitn('=', 1).collect::<~[&str]>();
-                match kv[0].to_ascii_lower() {
+                match kv[0].to_ascii_lower().as_slice() {
                     // TODO: GMT vs UTC
-                    ~"expires" => {
+                    "expires" => {
                         ck.expires = match strptime(kv[1], "%a, %d-%b-%y %H:%M:%S %Z") {
                             Ok(tm) => { // 2-digits year format is buggy
                                 let mut tm = tm;
@@ -99,22 +99,22 @@ impl FromStr for Cookie {
                         }
                     }
                     // max-age may override expires with a bigger val
-                    ~"max-age" => {
+                    "max-age" => {
                         let age : i64 = from_str(kv[1]).unwrap();
                         let mut ts = time::get_time();
                         ts.sec += age;
                         let tm = time::at_utc(ts);
                         ck.expires = Some(tm)
                     }
-                    ~"path"    => { ck.path = Some(kv[1].into_owned()) }
-                    ~"domain"  => { ck.domain = Some(kv[1].into_owned()) }
-                    ~"version" => (),
+                    "path"    => { ck.path = Some(kv[1].into_owned()) }
+                    "domain"  => { ck.domain = Some(kv[1].into_owned()) }
+                    "version" => (),
                     _ => { println!("unknown kv => {:?}", kv); }
                 }
             } else {
-                match seg.trim().to_ascii_lower() {
-                    ~"secure" => { ck.secure = true }
-                    ~"httponly" => { ck.http_only = true }
+                match seg.trim().to_ascii_lower().as_slice() {
+                    "secure" => { ck.secure = true }
+                    "httponly" => { ck.http_only = true }
                     _ => { println!("bad http cookie seg {:?}", seg) }
                 }
             }
