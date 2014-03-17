@@ -8,6 +8,7 @@
 #[feature(globs)];
 #[allow(unused_must_use)];
 #[allow(dead_code)];
+#[allow(deprecated_owned_vector)];
 
 extern crate extra;
 extern crate collections;
@@ -413,8 +414,6 @@ impl CookieJar {
     }
 
 }
-
-
 
 pub struct Response<'a> {
     version: HttpVersion,
