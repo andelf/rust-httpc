@@ -1,9 +1,10 @@
 #[feature(globs)];
 #[allow(unused_mut)];
+#[feature(phase)];
 
+#[phase(syntax, link)] extern crate log;
 extern crate http;
 extern crate test;
-
 use test::BenchHarness;
 use http::*;
 use http::compress::*;

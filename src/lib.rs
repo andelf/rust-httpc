@@ -9,8 +9,11 @@
 #[allow(unused_must_use)];
 #[allow(dead_code)];
 #[allow(deprecated_owned_vector)];
+#[feature(phase)];
 
-extern crate extra;
+#[phase(syntax, link)] extern crate log;
+
+extern crate url;
 extern crate collections;
 extern crate time;
 
@@ -33,12 +36,14 @@ use std::ascii::StrAsciiExt;
 //use std::ascii::AsciiStr;
 use std::num::from_str_radix;
 
-/// urlencode to encode querys
-pub use urlencode = extra::url::query_to_str;
-/// Url implementation
-pub use extra::url::Url;
-
 use collections::HashMap;
+
+/// urlencode to encode querys
+pub use urlencode = url::query_to_str;
+/// Url implementation
+pub use url::Url;
+
+
 
 pub use cookie::Cookie;
 
