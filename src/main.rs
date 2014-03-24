@@ -8,13 +8,13 @@ use http::*;
 fn dump_result(req: &Request, resp: &Response) {
     println!("\n======================= request result =======================");
     for (k, vs) in req.headers.iter() {
-        println!("H {:?} => {:?}", k, vs)
+        println!("H {:?} => {:}", k, vs)
     }
 
     println!("======================= response result =======================");
     println!("status = {} reason = {}", resp.status, resp.reason);
     for (k, vs) in resp.headers.iter() {
-        println!("H {:?} => {:?}", k, vs)
+        println!("H {:?} => {:}", k, vs)
     }
 }
 

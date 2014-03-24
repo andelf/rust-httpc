@@ -79,7 +79,7 @@ fn test_content_encoding_gzip() {
     let mut opener = build_opener();
     let resp = opener.open(&mut req).unwrap();
 
-    assert!(resp.get_headers("Content-Encoding").head().unwrap().contains("gzip"));
+    assert!(resp.get_headers("Content-Encoding").get(0).contains("gzip"));
 
     dump_result(&req, &resp);
     let mut r = GzipReader::new(resp);
@@ -96,7 +96,7 @@ fn test_content_encoding_deflate_zlib() {
     let mut opener = build_opener();
     let resp = opener.open(&mut req).unwrap();
 
-    assert!(resp.get_headers("Content-Encoding").head().unwrap().contains("deflate"));
+    assert!(resp.get_headers("Content-Encoding").get(0).contains("deflate"));
 
     dump_result(&req, &resp);
     let mut r = GzipReader::new(resp);
@@ -191,7 +191,7 @@ fn test_weather_sug() {
     let url : Url = from_str("http://toy1.weather.com.cn/search?cityname=yulin&_=2").unwrap();
 
     let mut req = Request::with_url(&url);
-    req.headers.find_or_insert(~"Referer", ~[~"http://www.weather.com.cn/"]);
+    req.set_header("Referer", "http://www.weather.com.cn/");
 
     let mut opener = build_opener();
     let mut resp = opener.open(&mut req).unwrap();

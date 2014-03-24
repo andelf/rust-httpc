@@ -73,11 +73,11 @@ impl Show for Cookie {
 impl FromStr for Cookie {
     fn from_str(s: &str) -> Option<Cookie> {
         let mut segs = s.split(';');
-        let kv = segs.next().unwrap().splitn('=', 1).collect::<~[&str]>();
-        let name = kv[0];
-        let value = kv[1];
+        let kv = segs.next().unwrap().splitn('=', 1).collect::<Vec<&str>>();
+        let name = kv.get(0).trim();
+        let value = kv.get(1).trim();
         let mut ck = Cookie::new_with_name_value(name, value);
-        for seg in segs.collect::<~[&str]>().iter() {
+        for seg in segs.collect::<Vec<&str>>().iter() {
             if seg.find('=').is_some() {
                 let kv = seg.trim().splitn('=', 1).collect::<~[&str]>();
                 match kv[0].to_ascii_lower().as_slice() {

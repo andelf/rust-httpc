@@ -8,7 +8,7 @@
 #[feature(globs)];
 #[allow(unused_must_use)];
 #[allow(dead_code)];
-#[allow(deprecated_owned_vector)];
+// #[deny(deprecated_owned_vector)];
 #[feature(phase)];
 
 #[phase(syntax, link)] extern crate log;
@@ -25,7 +25,7 @@ use std::io::BufferedReader;
 use std::io::IoResult;
 
 use std::str;
-use std::vec;
+use std::vec::Vec;
 
 use std::cmp::min;
 
@@ -82,8 +82,8 @@ pub struct Request<'a> {
     version: HttpVersion,
     uri: Url,
     method: HttpMethod,
-    headers: HashMap<~str, ~[~str]>,
-    content: ~[u8],
+    headers: HashMap<~str, Vec<~str>>,
+    content: Vec<u8>,
 }
 
 impl<'a> Request<'a> {
@@ -95,28 +95,28 @@ impl<'a> Request<'a> {
         }
         Request { version: HTTP_1_1, uri: uri, method: GET,
                   headers: HashMap::new(),
-                  content: ~[]}
+                  content: Vec::new() }
     }
 
     pub fn add_body(&mut self, body: &[u8]) {
-        self.content = body.into_owned();
+        self.content = Vec::from_slice(body);
     }
 
     // clean old header add new header
     pub fn set_header(&mut self, key: &str, value: &str) {
         self.headers.insert(key.to_ascii_lower(),
-                            ~[value.into_owned()]);
+                            vec!(value.into_owned()));
     }
 
     // add new header value to exist value
     pub fn add_header(&mut self, key: &str, value: &str) {
         self.headers.insert_or_update_with(key.to_ascii_lower(),
-                                           ~[value.into_owned()],
+                                           vec!(value.into_owned()),
                                            |_k,v| v.push(value.into_owned()));
     }
 
-    pub fn get_headers(&self, header_name: &str) -> ~[~str] {
-        let mut ret : ~[~str] = ~[];
+    pub fn get_headers(&self, header_name: &str) -> Vec<~str> {
+        let mut ret : Vec<~str> = Vec::new();
         match self.headers.find(&header_name.to_ascii_lower()) {
             Some(hdrs) => for hdr in hdrs.iter() {
                 ret.push(hdr.clone())
@@ -156,7 +156,7 @@ impl<'a> Request<'a> {
         w.write_str("\r\n");
 
         match self.method {
-            POST | PUT => w.write(self.content),
+            POST | PUT => w.write(self.content.as_slice()),
             _ => Ok(())
         };
 
@@ -207,20 +207,20 @@ impl Handler for HTTPHandler {
         let uri = req.uri.clone();
         let host = uri.port.map_or(req.uri.host.clone(),
                                    |p| format!("{}:{}", req.uri.host, p));
-        req.headers.find_or_insert(~"host", ~[host]);
+        req.headers.find_or_insert(~"host", vec!(host));
 
-        req.headers.find_or_insert(~"user-agent", ~[USER_AGENT.into_owned()]);
+        req.headers.find_or_insert(~"user-agent", vec!(USER_AGENT.into_owned()));
 
         // not support x-gzip or x-deflate.
-        req.headers.find_or_insert(~"accept-encoding", ~[~"identity"]);
+        req.headers.find_or_insert(~"accept-encoding", vec!(~"identity"));
 
         // not support keep-alive connection
-        req.headers.find_or_insert(~"connection", ~[~"close"]);
+        req.headers.find_or_insert(~"connection", vec!(~"close"));
 
         match req.method {
             POST | PUT => {
-                req.headers.find_or_insert(~"content-length", ~[req.content.len().to_str()]);
-                req.headers.find_or_insert(~"content-type", ~[~"application/x-www-form-urlencoded"]);
+                req.headers.find_or_insert(~"content-length", vec!(req.content.len().to_str()));
+                req.headers.find_or_insert(~"content-type", vec!(~"application/x-www-form-urlencoded"));
             },
             _          => (),
         }
@@ -291,15 +291,15 @@ impl Handler for HTTPCookieProcessor {
 
 
 pub struct OpenDirector {
-    handlers: ~[~Handler],
+    handlers: Vec<~Handler>,
 }
 
 impl OpenDirector {
     pub fn new() -> OpenDirector {
         OpenDirector { handlers:
-                       ~[~HTTPHandler::new()         as ~Handler,
-                         ~HTTPCookieProcessor::new() as ~Handler,
-                         ],
+                       vec!(~HTTPHandler::new()         as ~Handler,
+                            ~HTTPCookieProcessor::new() as ~Handler
+                            ),
         }
     }
     pub fn open(&mut self, req: &mut Request) -> Option<Response> {
@@ -388,7 +388,7 @@ impl CookieJar {
     }
 
 
-    pub fn cookies_for_request(&mut self, req: &Request) -> ~[Cookie] {
+    pub fn cookies_for_request(&mut self, req: &Request) -> Vec<Cookie> {
         let uri = req.uri.clone();
         let domain = uri.clone().host;
         let path = uri.clone().path;
@@ -396,7 +396,7 @@ impl CookieJar {
         // TOOD: handle secure & httpOnly
         //let scheme = uri.scheme.clone();
 
-        let mut ret = ~[];
+        let mut ret = Vec::new();
         // find domain
         for d in m1.keys() {
             if (d.starts_with(".") && domain.ends_with(*d)) || str::eq(d, &domain) {
@@ -424,7 +424,7 @@ pub struct Response<'a> {
     version: HttpVersion,
     status: int,
     reason: ~str,
-    headers: HashMap<~str, ~[~str]>,
+    headers: HashMap<~str, Vec<~str>>,
 
     priv chunked: bool,
     priv chunked_left: Option<uint>,
@@ -444,16 +444,16 @@ impl<'a> Response<'a> {
         let mut stream = BufferedReader::with_capacity(1, s.clone());
 
         let line = stream.read_line().unwrap(); // status line
-        let segs = line.splitn(' ', 2).collect::<~[&str]>();
+        let segs = line.splitn(' ', 2).collect::<Vec<&str>>();
 
-        let version = match segs[0] {
+        let version = match *segs.get(0) {
             "HTTP/1.1"                  => HTTP_1_1,
             "HTTP/1.0"                  => HTTP_1_0,
             v if v.starts_with("HTTP/") => HTTP_1_0,
             _                           => fail!("unsupported HTTP version")
         };
-        let status = from_str::<int>(segs[1]).unwrap();
-        let reason = segs[2].trim_right();
+        let status = from_str::<int>(*segs.get(1)).unwrap();
+        let reason = segs.get(2).trim_right();
 
         debug!("Got HTTP Response version = {:?} status = {:?} reason = {:?}",
                version, status, reason);
@@ -461,11 +461,11 @@ impl<'a> Response<'a> {
         let mut headers = HashMap::new();
         loop {
             let line = stream.read_line().unwrap();
-            let segs = line.splitn(':', 1).collect::<~[&str]>();
+            let segs = line.splitn(':', 1).collect::<Vec<&str>>();
             if segs.len() == 2 {
-                let k = segs[0];
-                let v = segs[1].trim();
-                headers.insert_or_update_with(k.to_ascii_lower(), ~[v.into_owned()],
+                let k = segs.get(0).trim();
+                let v = segs.get(1).trim();
+                headers.insert_or_update_with(k.to_ascii_lower(), vec!(v.into_owned()),
                                               |_k, ov| ov.push(v.into_owned()));
             } else {
                 if [~"\r\n", ~"\n", ~""].contains(&line) {
@@ -478,7 +478,7 @@ impl<'a> Response<'a> {
         let mut chunked = false;
         for (k, v) in headers.iter() {
             if k.eq_ignore_ascii_case("transfer-encoding") {
-                if v.head().unwrap().eq_ignore_ascii_case("chunked") {
+                if v.get(0).eq_ignore_ascii_case("chunked") {
                     chunked = true;
                 }
                 break;
@@ -489,7 +489,7 @@ impl<'a> Response<'a> {
         if !chunked {
             length = match headers.find(&"Content-Length".to_ascii_lower()) {
                 None => None,
-                Some(v) => from_str::<uint>(*v.head().unwrap()),
+                Some(v) => from_str::<uint>(*v.get(0)),
             }
         }
 
@@ -502,8 +502,8 @@ impl<'a> Response<'a> {
                    sock: ~s.clone(), eof: false }
     }
 
-    pub fn get_headers(&self, header_name: &str) -> ~[~str] {
-        let mut ret : ~[~str] = ~[];
+    pub fn get_headers(&self, header_name: &str) -> Vec<~str> {
+        let mut ret = Vec::new();
         match self.headers.find(&header_name.to_ascii_lower()) {
             Some(hdrs) => for hdr in hdrs.iter() {
                 ret.push(hdr.clone())
@@ -585,14 +585,14 @@ impl<'a> Reader for Response<'a> {
         match self.chunked_left {
             Some(left) => {
                 let tbuf_len = min(buf.len(), left);
-                let mut tbuf = vec::from_elem(tbuf_len, 0u8);
-                match self.sock.read(tbuf) {
+                let mut tbuf = Vec::from_elem(tbuf_len, 0u8);
+                match self.sock.read(tbuf.as_mut_slice()) {
                     Ok(nread) => {
-                        buf.move_from(tbuf, 0, nread);
+                        buf.move_from(tbuf.as_slice().into_owned(), 0, nread);
                         if left == nread {
                             // this chunk ends
                             // toss the CRLF at the end of the chunk
-                            assert!(self.sock.read_bytes(2).is_ok());
+                            assert!(self.sock.read_exact(2).is_ok());
                             self.chunked_left = None;
                         } else {
                             self.chunked_left = Some(left - nread);
@@ -609,7 +609,7 @@ impl<'a> Reader for Response<'a> {
                 let chunked_left = self.read_next_chunk_size();
                 match chunked_left {
                     Some(0) => {
-                        assert!(self.sock.read_bytes(2).is_ok());
+                        assert!(self.sock.read_exact(2).is_ok());
                         self.eof = true;
                         Err(io::standard_error(io::EndOfFile))
                     }
