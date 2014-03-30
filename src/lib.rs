@@ -1,15 +1,13 @@
-#[desc = "A rust crate for http protocol"];
-#[license = "MIT"];
+#![desc = "A rust crate for http protocol"]
+#![license = "MIT"]
 
-#[crate_id = "http#0.1-pre"];
-#[crate_type = "rlib"];
-#[crate_type = "dylib"];
+#![crate_id = "http#0.1-pre"]
+#![crate_type = "rlib"]
+#![crate_type = "dylib"]
 
-#[feature(globs)];
-#[allow(unused_must_use)];
-#[allow(dead_code)];
-// #[deny(deprecated_owned_vector)];
-#[feature(phase)];
+#![feature(globs, phase)]
+#![allow(unused_must_use)]
+#![allow(dead_code)]
 
 #[phase(syntax, link)] extern crate log;
 
@@ -296,10 +294,8 @@ pub struct OpenDirector {
 
 impl OpenDirector {
     pub fn new() -> OpenDirector {
-        OpenDirector { handlers:
-                       vec!(~HTTPHandler::new()         as ~Handler,
-                            ~HTTPCookieProcessor::new() as ~Handler
-                            ),
+        OpenDirector { handlers: vec!(~HTTPHandler::new()         as ~Handler,
+                                      ~HTTPCookieProcessor::new() as ~Handler),
         }
     }
     pub fn open(&mut self, req: &mut Request) -> Option<Response> {
