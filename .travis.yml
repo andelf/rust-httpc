@@ -7,3 +7,9 @@ script:
   - rustc src/lib.rs
   - rustc --test src/lib.rs
   - ./http
+notifications:
+  email:
+    recipients:
+      - fledna@foxmail.com
+    on_success: change
+    on_failure: always

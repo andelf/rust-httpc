@@ -11,37 +11,37 @@ pub type alloc_func =
 pub type free_func =
     ::std::option::Option<extern "C" fn(arg1: *c_void, arg2: *c_void)>;
 pub struct Struct_z_stream_s {
-    next_in: *mut c_char,
-    avail_in: c_uint,
-    total_in: c_ulong,
-    next_out: *mut c_char,
-    avail_out: c_uint,
-    total_out: c_ulong,
-    msg: *mut c_schar,
-    state: *mut Struct_internal_state,
-    zalloc: alloc_func,
-    zfree: free_func,
-    opaque: *c_void,
-    data_type: c_int,
-    adler: c_ulong,
-    reserved: c_ulong,
+    pub next_in: *mut c_char,
+    pub avail_in: c_uint,
+    pub total_in: c_ulong,
+    pub next_out: *mut c_char,
+    pub avail_out: c_uint,
+    pub total_out: c_ulong,
+    pub msg: *mut c_schar,
+    pub state: *mut Struct_internal_state,
+    pub zalloc: alloc_func,
+    pub zfree: free_func,
+    pub opaque: *c_void,
+    pub data_type: c_int,
+    pub adler: c_ulong,
+    pub reserved: c_ulong,
 }
 pub type z_stream = Struct_z_stream_s;
 pub type z_streamp = *mut z_stream;
 pub struct Struct_gz_header_s {
-    text: c_int,
-    time: c_ulong,
-    xflags: c_int,
-    os: c_int,
-    extra: *mut c_char,
-    extra_len: c_uint,
-    extra_max: c_uint,
-    name: *mut c_char,
-    name_max: c_uint,
-    comment: *mut c_char,
-    comm_max: c_uint,
-    hcrc: c_int,
-    done: c_int,
+    pub text: c_int,
+    pub time: c_ulong,
+    pub xflags: c_int,
+    pub os: c_int,
+    pub extra: *mut c_char,
+    pub extra_len: c_uint,
+    pub extra_max: c_uint,
+    pub name: *mut c_char,
+    pub name_max: c_uint,
+    pub comment: *mut c_char,
+    pub comm_max: c_uint,
+    pub hcrc: c_int,
+    pub done: c_int,
 }
 pub type gz_header = Struct_gz_header_s;
 pub type gz_headerp = *mut gz_header;
@@ -55,12 +55,12 @@ pub type out_func =
                                arg3: c_uint) -> c_int>;
 pub type gzFile = *mut Struct_gzFile_s;
 pub struct Struct_gzFile_s {
-    have: c_uint,
-    next: *mut c_uchar,
-    pos: off_t,
+    pub have: c_uint,
+    pub next: *mut c_uchar,
+    pub pos: off_t,
 }
 pub struct Struct_internal_state {
-    dummy: c_int,
+    pub dummy: c_int,
 }
 #[link(name = "z")]
 extern "C" {

@@ -10,16 +10,16 @@ use std::ascii::StrAsciiExt;
 // TODO: handle port
 #[deriving(Eq, Clone)]
 pub struct Cookie {
-    name: ~str,
-    value: ~str,
-    domain: Option<~str>,
-    path: Option<~str>,
-    comment: Option<~str>,
-    secure: bool,
-    http_only: bool,
-    version: int,
-    created: Tm,
-    expires: Option<Tm>,
+    pub name: ~str,
+    pub value: ~str,
+    pub domain: Option<~str>,
+    pub path: Option<~str>,
+    pub comment: Option<~str>,
+    pub secure: bool,
+    pub http_only: bool,
+    pub version: int,
+    pub created: Tm,
+    pub expires: Option<Tm>,
 }
 
 impl Cookie {

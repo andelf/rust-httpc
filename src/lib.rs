@@ -77,11 +77,11 @@ impl Show for HttpVersion {
 
 // ==================== Request
 pub struct Request<'a> {
-    version: HttpVersion,
-    uri: Url,
-    method: HttpMethod,
-    headers: HashMap<~str, Vec<~str>>,
-    content: Vec<u8>,
+    pub version: HttpVersion,
+    pub uri: Url,
+    pub method: HttpMethod,
+    pub headers: HashMap<~str, Vec<~str>>,
+    pub content: Vec<u8>,
 }
 
 impl<'a> Request<'a> {
@@ -126,17 +126,17 @@ impl<'a> Request<'a> {
 
     pub fn write_request(&self, w: &mut Writer) -> IoResult<()> {
         // METHOD /path HTTP/v.v
-        w.write_str(self.method.to_str());
+        write!(w, "{} ", self.method.to_str());
 
-        w.write_char(' ');
+        // /path
         w.write_str(self.uri.path);
         if !self.uri.query.is_empty() {
             w.write_char('?');
             w.write_str(urlencode(&self.uri.query));
         }
 
-        w.write_str(" ");
-        w.write_str(self.version.to_str());
+        write!(w, " {}", self.version.to_str());
+
         w.write_str("\r\n");
 
         // headers
@@ -182,13 +182,11 @@ pub fn to_header_case(key: &str) -> ~str {
 
 #[allow(unused_variable)]
 pub trait Handler {
-    fn before_request(&mut self, req: &mut Request) -> Option<Request> { None }
+    fn before_request(&mut self, req: &mut Request) {}
     fn after_response(&mut self, req: &Request, resp: &mut Response) -> Option<Response> { None }
-
+    fn redirect_request(&mut self, req: &Request, resp: &Response) -> Option<Request> { None }
     fn handle_order(&self) -> int { 100 }
 }
-
-
 
 pub struct HTTPHandler {
     debug: bool
@@ -201,7 +199,7 @@ impl HTTPHandler {
 }
 
 impl Handler for HTTPHandler {
-    fn before_request(&mut self, req: &mut Request) -> Option<Request> {
+    fn before_request(&mut self, req: &mut Request) {
         let uri = req.uri.clone();
         let host = uri.port.map_or(req.uri.host.clone(),
                                    |p| format!("{}:{}", req.uri.host, p));
@@ -222,7 +220,6 @@ impl Handler for HTTPHandler {
             },
             _          => (),
         }
-        None
     }
 
 }
@@ -255,8 +252,9 @@ impl Handler for HTTPHandler {
 //     }
 // }
 
+/// Cookie handler
 pub struct HTTPCookieProcessor {
-    jar: CookieJar
+    pub jar: CookieJar
 }
 
 impl HTTPCookieProcessor {
@@ -266,11 +264,10 @@ impl HTTPCookieProcessor {
 }
 
 impl Handler for HTTPCookieProcessor {
-    fn before_request(&mut self, req: &mut Request) -> Option<Request> {
+    fn before_request(&mut self, req: &mut Request) {
         for ck in self.jar.cookies_for_request(req).iter() {
             req.add_header("Cookie", ck.to_header());
         }
-        None
     }
     fn after_response(&mut self, req: &Request, resp: &mut Response) -> Option<Response> {
         for cookie_header in resp.get_headers("set-cookie").iter() {
@@ -288,8 +285,10 @@ impl Handler for HTTPCookieProcessor {
 }
 
 
+
+
 pub struct OpenDirector {
-    handlers: Vec<~Handler>,
+    pub handlers: Vec<~Handler>,
 }
 
 impl OpenDirector {
@@ -298,6 +297,11 @@ impl OpenDirector {
                                       ~HTTPCookieProcessor::new() as ~Handler),
         }
     }
+
+    pub fn add_handler(&mut self, h: ~Handler) {
+        self.handlers.push(h);
+    }
+
     pub fn open(&mut self, req: &mut Request) -> Option<Response> {
         self.handlers.sort_by(|h1,h2| h1.handle_order().cmp(&h2.handle_order()));
         for hd in self.handlers.mut_iter() {
@@ -324,6 +328,14 @@ impl OpenDirector {
             hd.after_response(req, &mut resp);
         }
 
+        // let newreq = self.handlers.mut_iter().fold(None, |ret, hd| {
+        //         if ret.is_some() {
+        //             ret
+        //         } else {
+        //             hd.redirect_request(req, &resp)
+        //         }
+        //     });
+
         Some(resp)
     }
 }
@@ -335,7 +347,7 @@ pub fn build_opener() -> OpenDirector {
 
 pub struct CookieJar {
     // [Domain Path Name]
-    cookies: HashMap<~str, HashMap<~str, HashMap<~str, Cookie>>>
+    pub cookies: HashMap<~str, HashMap<~str, HashMap<~str, Cookie>>>
 }
 
 #[allow(unused_mut)]
@@ -417,22 +429,21 @@ impl CookieJar {
 }
 
 pub struct Response<'a> {
-    version: HttpVersion,
-    status: int,
-    reason: ~str,
-    headers: HashMap<~str, Vec<~str>>,
+    pub version: HttpVersion,
+    pub status: int,
+    pub reason: ~str,
+    pub headers: HashMap<~str, Vec<~str>>,
 
-    priv chunked: bool,
-    priv chunked_left: Option<uint>,
-    length: Option<uint>,
-    priv length_left: uint,
+    chunked: bool,
+    chunked_left: Option<uint>,
+    pub length: Option<uint>,
+    length_left: uint,
     // make sock a owned TcpStream
     // FIXME: maybe a rust bug here
     // when using Buffer/Reader traits here, program will hangs at main() ends
     // gdb shows that epoll_wait with timeout=-1, and pthread_cond_wait()
-    priv sock: ~TcpStream,
-    priv eof: bool,
-
+    sock: ~TcpStream,
+    eof: bool,
 }
 
 impl<'a> Response<'a> {

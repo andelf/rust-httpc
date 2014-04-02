@@ -37,11 +37,11 @@ static Z_NO_FLUSH : c_int = 0;
 
 /// for http gzip/deflate
 pub struct GzipReader<R> {
-    priv inner: R,
-    priv zs: zlib::z_stream,
-    priv buf: Vec<u8>,
-    priv buf_len: uint,
-    priv eof: bool,
+    inner: R,
+    zs: zlib::z_stream,
+    buf: Vec<u8>,
+    buf_len: uint,
+    eof: bool,
 }
 
 
@@ -111,11 +111,11 @@ impl<R:Reader> Reader for GzipReader<R> {
 
 // duplicated code :(
 pub struct GzipReaderWrapper<'a> {
-    priv inner: &'a mut Buffer,
-    priv zs: zlib::z_stream,
-    priv buf: Vec<u8>,
-    priv buf_len: uint,
-    priv eof: bool,
+    inner: &'a mut Buffer,
+    zs: zlib::z_stream,
+    buf: Vec<u8>,
+    buf_len: uint,
+    eof: bool,
 }
 
 
