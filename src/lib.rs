@@ -14,6 +14,7 @@
 extern crate url;
 extern crate collections;
 extern crate time;
+extern crate libc;
 
 use std::io;
 use std::io::net::addrinfo::get_host_addresses;
@@ -201,16 +202,14 @@ impl HTTPHandler {
 impl Handler for HTTPHandler {
     fn before_request(&mut self, req: &mut Request) {
         let uri = req.uri.clone();
-        let host = uri.port.map_or(req.uri.host.clone(),
-                                   |p| format!("{}:{}", req.uri.host, p));
+        let host = uri.port.map_or(req.uri.host.clone(), |p| format!("{}:{}", req.uri.host, p));
         req.headers.find_or_insert(~"host", vec!(host));
 
         req.headers.find_or_insert(~"user-agent", vec!(USER_AGENT.into_owned()));
 
-        // not support x-gzip or x-deflate.
+        // partly support x-deflate.
         req.headers.find_or_insert(~"accept-encoding", vec!(~"identity"));
 
-        // not support keep-alive connection
         req.headers.find_or_insert(~"connection", vec!(~"close"));
 
         match req.method {
@@ -252,6 +251,49 @@ impl Handler for HTTPHandler {
 //     }
 // }
 
+/// Redirect handler
+pub struct HTTPRedirectHandler {
+    debug: bool,
+}
+
+impl HTTPRedirectHandler {
+    pub fn new() -> HTTPRedirectHandler {
+        HTTPRedirectHandler { debug: true }
+    }
+}
+
+impl Handler for HTTPRedirectHandler {
+    fn handle_order(&self) -> int {
+        300
+    }
+
+    fn redirect_request(&mut self, req: &Request, resp: &Response) -> Option<Request> {
+        if [301, 302, 303, 307].contains(&resp.status) && ( req.method == GET || req.method == HEAD ) ||
+            [301, 302, 303].contains(&resp.status) && req.method == POST {
+            println!("need redirect!");
+            let newurl = match resp.get_headers("location").last() {
+                Some(u) => u.clone(),
+                None => match resp.get_headers("uri").last() {
+                    Some(u) => u.clone(),
+                    None => fail!("Protocal error: redirect without Location header")
+                }
+            };
+            let mut newreq = Request::with_url(&from_str(newurl).unwrap());
+            for (k, vs) in req.headers.iter() {
+                for v in vs.iter() {
+                    newreq.add_header(*k, *v);
+                }
+            }
+            println!("new req => {:?}", newreq);
+            // TODO: fix possible malformed URL
+            Some(newreq)
+
+        } else {
+            None
+        }
+    }
+}
+
 /// Cookie handler
 pub struct HTTPCookieProcessor {
     pub jar: CookieJar
@@ -289,12 +331,15 @@ impl Handler for HTTPCookieProcessor {
 
 pub struct OpenDirector {
     pub handlers: Vec<~Handler>,
+    pub max_redirect: int,
 }
 
 impl OpenDirector {
     pub fn new() -> OpenDirector {
         OpenDirector { handlers: vec!(~HTTPHandler::new()         as ~Handler,
-                                      ~HTTPCookieProcessor::new() as ~Handler),
+                                      ~HTTPCookieProcessor::new() as ~Handler,
+                                      ~HTTPRedirectHandler::new() as ~Handler),
+                       max_redirect: 10,
         }
     }
 
@@ -303,6 +348,10 @@ impl OpenDirector {
     }
 
     pub fn open(&mut self, req: &mut Request) -> Option<Response> {
+        if self.max_redirect == 0 {
+            return None
+        }
+
         self.handlers.sort_by(|h1,h2| h1.handle_order().cmp(&h2.handle_order()));
         for hd in self.handlers.mut_iter() {
             hd.before_request(req);
@@ -328,15 +377,20 @@ impl OpenDirector {
             hd.after_response(req, &mut resp);
         }
 
-        // let newreq = self.handlers.mut_iter().fold(None, |ret, hd| {
-        //         if ret.is_some() {
-        //             ret
-        //         } else {
-        //             hd.redirect_request(req, &resp)
-        //         }
-        //     });
-
-        Some(resp)
+        let newreq = self.handlers.mut_iter().fold(None, |ret, hd| {
+                if ret.is_some() {
+                    ret
+                } else {
+                    hd.redirect_request(req, &resp)
+                }
+            });
+        match newreq {
+            None => Some(resp),
+            Some(mut req) => {
+                self.max_redirect -= 1;
+                self.open(&mut req)
+            }
+        }
     }
 }
 

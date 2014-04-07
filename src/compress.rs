@@ -2,7 +2,7 @@
 Compress library. wrapper from zlib.
  */
 
-use std::libc::{c_char, c_int};
+use libc::{c_char, c_int};
 use std::cast;
 use std::vec::Vec;
 use std::ptr;

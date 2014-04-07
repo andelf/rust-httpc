@@ -13,13 +13,13 @@ use http::compress::*;
 fn dump_result(req: &Request, resp: &Response) {
     println!("\n======================= request result =======================");
     for (k, vs) in req.headers.iter() {
-        println!("H {:?} => {:?}", k, vs)
+        println!("H {:?} => {}", k, vs)
     }
 
     println!("======================= response result =======================");
     println!("status = {} reason = {}", resp.status, resp.reason);
     for (k, vs) in resp.headers.iter() {
-        println!("H {:?} => {:?}", k, vs)
+        println!("H {:?} => {}", k, vs)
     }
 }
 
@@ -69,11 +69,11 @@ fn test_cookie_processor() {
 }
 
 
-/* the site is un-accessable
 
 #[test]
 fn test_content_encoding_gzip() {
-    let url = from_str("http://www.vervestudios.co/projects/compression-tests/static/js/test-libs/jquery.min.js?d=1394076086888&format=gzip").unwrap();
+    // let url = from_str("http://www.vervestudios.co/projects/compression-tests/static/js/test-libs/jquery.min.js?d=1394076086888&format=gzip").unwrap();
+    let url = from_str("http://www.baidu.com/").unwrap();
     let mut req = Request::with_url(&url);
     req.add_header("Accept-Encoding", "gzip,deflate");
     let mut opener = build_opener();
@@ -84,9 +84,10 @@ fn test_content_encoding_gzip() {
     dump_result(&req, &resp);
     let mut r = GzipReader::new(resp);
     let ret = r.read_to_str();
-    assert!(ret.unwrap().contains("jQuery JavaScript"));
-
+    assert!(ret.unwrap().contains("</html>")); // find tail
 }
+
+/* the site is un-accessable
 
 #[test]
 fn test_content_encoding_deflate_zlib() {
