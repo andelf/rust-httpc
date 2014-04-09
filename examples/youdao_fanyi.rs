@@ -3,13 +3,13 @@
 
 #![feature(globs, macro_rules)]
 
-extern crate http;
+extern crate httpc;
 extern crate time;
 extern crate serialize;
 
 use std::os;
 use serialize::{json, Encodable, Decodable};
-use http::*;
+use httpc::*;
 
 
 

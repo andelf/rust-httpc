@@ -3,11 +3,11 @@
 #![feature(phase)]
 
 #[phase(syntax, link)] extern crate log;
-extern crate http;
+extern crate httpc;
 extern crate test;
 use test::BenchHarness;
-use http::*;
-use http::compress::*;
+use httpc::*;
+use httpc::compress::*;
 
 
 fn dump_result(req: &Request, resp: &Response) {

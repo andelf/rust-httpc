@@ -1,6 +1,4 @@
-# rust-http-helper
-
-FIXME: crate name use ``http``.
+# rustc
 
 ## A http client lib.
 
@@ -34,19 +32,16 @@ FIXME: crate name use ``http``.
 
 ### build lib
 
-    $ rustc src/http/lib.rs
+    $ rustc src/httpc/lib.rs
 
 ### build test & run test
 
-    $ rustc -L. --test src/http/test.rs
-    $ rustc --test src/http/lib.rs
-    $ ./test
-    $ ./http
-    $ ./http --bench
+    $ rustc --test src/httpc/lib.rs
+    $ ./httpc
 
 ### build sample program & run
 
-    $ rustc -L. src/http/main.rs
+    $ rustc -L. src/examples/{main,test,...}.rs
     $ ./main
 
 ## Simple Usage
@@ -54,8 +49,8 @@ FIXME: crate name use ``http``.
 ```rust
 #[feature(globs)];
 
-extern crate http;
-use http::*;
+extern crate httpc;
+use httpc::*;
 
 fn dump_result(req: &Request, resp: &Response) {
     println!("\n======================= request result =======================");

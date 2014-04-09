@@ -4,9 +4,9 @@ before_install:
 install:
   - sudo apt-get install rust-nightly
 script:
-  - rustc src/lib.rs
-  - rustc --test src/lib.rs
-  - ./http
+  - rustc src/httpc/lib.rs
+  - rustc --test src/httpc/lib.rs
+  - ./httpc
 notifications:
   email:
     recipients:

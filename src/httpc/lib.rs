@@ -1,9 +1,8 @@
 #![desc = "A rust crate for http protocol"]
 #![license = "MIT"]
 
-#![crate_id = "http#0.1-pre"]
-#![crate_type = "rlib"]
-#![crate_type = "dylib"]
+#![crate_id = "httpc#0.2"]
+#![crate_type = "lib"]
 
 #![feature(globs, phase)]
 #![allow(unused_must_use)]

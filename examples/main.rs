@@ -1,8 +1,8 @@
 #![feature(globs)]
 
-extern crate http;
+extern crate httpc;
 
-use http::*;
+use httpc::*;
 
 
 fn dump_result(req: &Request, resp: &Response) {
@@ -20,26 +20,26 @@ fn dump_result(req: &Request, resp: &Response) {
 
 
 fn main() {
-    let url : Url = from_str("http://www.baidu.com").unwrap();
-    let mut req = Request::with_url(&url);
+    // let url : Url = from_str("http://www.baidu.com").unwrap();
+    // let mut req = Request::with_url(&url);
 
     //req.add_header("Accept-Encoding", "gzip,deflate");
     //req.method = POST;
     //req.add_header("user-agent", "Mozilla/5.0");
 
     let mut opener = build_opener();
-    let mut resp = opener.open(&mut req).unwrap();
+    // let mut resp = opener.open(&mut req).unwrap();
 
-    dump_result(&req, &resp);
+    // dump_result(&req, &resp);
 
 
-    let url : Url = from_str("http://video.baidu.com/").unwrap();
+    let url : Url = from_str("http://t.cn/8siKe6l").unwrap();
     let mut req = Request::with_url(&url);
     let mut resp = opener.open(&mut req).unwrap();
 
     dump_result(&req, &resp);
 
-    assert!(resp.read_to_end().is_ok());
+    println!("got => {}", resp.read_to_str().unwrap());
 
     println!("ends");
 }
