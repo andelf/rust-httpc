@@ -164,7 +164,7 @@ impl<'a> Request<'a> {
 }
 
 pub fn to_header_case(key: &str) -> ~str {
-    let mut ret = ~"";
+    let mut ret = StrBuf::new();
     let mut flag_is_at_words_begin = true;
     for c in key.as_bytes().iter() {
         if flag_is_at_words_begin {
@@ -177,7 +177,7 @@ pub fn to_header_case(key: &str) -> ~str {
             flag_is_at_words_begin = true;
         }
     }
-    ret
+    ret.into_owned()
 }
 
 #[allow(unused_variable)]
@@ -574,7 +574,7 @@ impl<'a> Response<'a> {
     }
 
     fn read_next_chunk_size(&mut self) -> Option<uint> {
-        let mut line = ~"";
+        let mut line = StrBuf::new();
         static MAXNUM_SIZE : uint = 16; // 16 hex digits
         static HEX_CHARS : &'static [u8] = bytes!("0123456789abcdefABCDEF");
         let mut is_in_chunk_extension = false;
@@ -603,9 +603,9 @@ impl<'a> Response<'a> {
         if line.len() > MAXNUM_SIZE {
             fail!("http chunk transfer encoding format: size line too long: {:?}", line);
         }
-        debug!("read_next_chunk_size, line={:?} value={:?}", line, from_str_radix::<uint>(line, 16));
+        debug!("read_next_chunk_size, line={:?} value={:?}", line, from_str_radix::<uint>(line.as_slice(), 16));
 
-        match from_str_radix(line, 16) {
+        match from_str_radix(line.as_slice(), 16) {
             Some(v) => Some(v),
             None => fail!("wrong chunk size value: {:?}", line),
         }
