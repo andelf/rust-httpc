@@ -133,8 +133,8 @@ mod test {
         let ck_opt = from_str::<Cookie>(header);
         assert!(ck_opt.is_some());
         let ck = ck_opt.unwrap();
-        assert_eq!(ck.to_header(), ~"ASPSESSIONIDQARTTCBD=JOACNNHAPHHFCFPGOFILBMJF");
-        assert_eq!(ck.path, Some(~"/"));
+        assert_eq!(ck.to_header(), "ASPSESSIONIDQARTTCBD=JOACNNHAPHHFCFPGOFILBMJF".to_owned());
+        assert_eq!(ck.path, Some("/".to_owned()));
     }
 
     #[test]
@@ -143,7 +143,7 @@ mod test {
         let ck_opt = from_str::<Cookie>(header);
         assert!(ck_opt.is_some());
         let ck = ck_opt.unwrap();
-        assert_eq!(ck.to_header(), ~"BAIDUID=1AC4B89822952E9611807601CBC7FED4:FG=1");
+        assert_eq!(ck.to_header(), "BAIDUID=1AC4B89822952E9611807601CBC7FED4:FG=1".to_owned());
         assert!(!ck.is_expired());
     }
 }

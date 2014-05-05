@@ -5,7 +5,7 @@
 #[phase(syntax, link)] extern crate log;
 extern crate httpc;
 extern crate test;
-use test::BenchHarness;
+use test::Bencher;
 use httpc::*;
 use httpc::compress::*;
 
@@ -24,7 +24,7 @@ fn dump_result(req: &Request, resp: &Response) {
 }
 
 #[bench]
-fn bench_http_request_get_baidu(b: &mut BenchHarness) {
+fn bench_http_request_get_baidu(b: &mut Bencher) {
     let url : Url = from_str("http://www.baidu.com").unwrap();
     let mut req = Request::with_url(&url);
 
@@ -44,7 +44,7 @@ fn test_http_response_reader_eof() {
     let mut opener = build_opener();
     let mut resp = opener.open(&mut req).unwrap();
     assert!(resp.read_to_end().is_ok());
-    assert_eq!(resp.read_to_end().unwrap(), ~[]);
+    assert_eq!(resp.read_to_end().unwrap(), vec!());
 }
 
 
@@ -204,7 +204,7 @@ fn test_weather_sug() {
             content
         }
         Err(_) =>
-            ~""
+            "".to_owned()
     };
     assert!(content.len() > 10);
     assert!(resp.status == 200);

@@ -48,9 +48,9 @@ fn main() {
         fail!("useage: {:?} word", os::self_exe_name().unwrap())
     }
     let word = args[0];
-    let params = vec!((~"keyfrom", ~"neup204"), (~"key", ~"1844139492"),
-                      (~"type", ~"data"), (~"doctype", ~"json"),
-                      (~"version", ~"1.1"), (~"q", word.into_owned()));
+    let params = vec!(("keyfrom".to_owned(), "neup204".to_owned()), ("key".to_owned(), "1844139492".to_owned()),
+                      ("type".to_owned(), "data".to_owned()), ("doctype".to_owned(), "json".to_owned()),
+                      ("version".to_owned(), "1.1".to_owned()), ("q".to_owned(), word.into_owned()));
     let mut url : Url = from_str("http://fanyi.youdao.com/openapi.do").unwrap();
     url.query = params;
     nslog!("url = {}", url.to_str());

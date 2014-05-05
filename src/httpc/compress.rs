@@ -200,7 +200,7 @@ mod test {
                                 0x02, 0x00, 0x55, 0x0b, 0xfc, 0xa0, 0x05, 0x00, 0x00, 0x00];
         let src = io::BufReader::new(gz_file_content);
         let mut dst = GzipReader::new(src);
-        assert_eq!(dst.read_to_str().unwrap(), ~"fuck\n");
+        assert_eq!(dst.read_to_str().unwrap(), "fuck\n".to_owned());
     }
 
     #[test]
@@ -210,7 +210,7 @@ mod test {
                                 0x02, 0x00, 0x55, 0x0b, 0xfc, 0xa0, 0x05, 0x00, 0x00, 0x00];
         let src = io::BufReader::new(gz_file_content);
         let mut dst = GzipReader::new(src);
-        assert_eq!(dst.read_to_str().unwrap(), ~"fuck\n");
-        assert_eq!(dst.read_to_str().unwrap(), ~"");
+        assert_eq!(dst.read_to_str().unwrap(), "fuck\n".to_owned());
+        assert_eq!(dst.read_to_str().unwrap(), "".to_owned());
     }
 }

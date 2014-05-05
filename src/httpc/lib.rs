@@ -1,7 +1,7 @@
 #![desc = "A rust crate for http protocol"]
 #![license = "MIT"]
 
-#![crate_id = "httpc#0.2"]
+#![crate_id = "github.com/andelf/rust-httpc#httpc:0.2"]
 #![crate_type = "lib"]
 
 #![feature(globs, phase)]
@@ -88,8 +88,8 @@ impl<'a> Request<'a> {
     pub fn with_url(uri: &Url) -> Request {
         // fix empty path
         let mut uri = uri.clone();
-        if uri.path == ~"" {
-            uri.path = ~"/";
+        if uri.path == "".to_owned() {
+            uri.path = "/".to_owned();
         }
         Request { version: HTTP_1_1, uri: uri, method: GET,
                   headers: HashMap::new(),
@@ -202,19 +202,19 @@ impl Handler for HTTPHandler {
     fn before_request(&mut self, req: &mut Request) {
         let uri = req.uri.clone();
         let host = uri.port.map_or(req.uri.host.clone(), |p| format!("{}:{}", req.uri.host, p));
-        req.headers.find_or_insert(~"host", vec!(host));
+        req.headers.find_or_insert("host".to_owned(), vec!(host));
 
-        req.headers.find_or_insert(~"user-agent", vec!(USER_AGENT.into_owned()));
+        req.headers.find_or_insert("user-agent".to_owned(), vec!(USER_AGENT.into_owned()));
 
         // partly support x-deflate.
-        req.headers.find_or_insert(~"accept-encoding", vec!(~"identity"));
+        req.headers.find_or_insert("accept-encoding".to_owned(), vec!("identity".to_owned()));
 
-        req.headers.find_or_insert(~"connection", vec!(~"close"));
+        req.headers.find_or_insert("connection".to_owned(), vec!("close".to_owned()));
 
         match req.method {
             POST | PUT => {
-                req.headers.find_or_insert(~"content-length", vec!(req.content.len().to_str()));
-                req.headers.find_or_insert(~"content-type", vec!(~"application/x-www-form-urlencoded"));
+                req.headers.find_or_insert("content-length".to_owned(), vec!(req.content.len().to_str()));
+                req.headers.find_or_insert("content-type".to_owned(), vec!("application/x-www-form-urlencoded".to_owned()));
             },
             _          => (),
         }
@@ -235,7 +235,7 @@ impl Handler for HTTPHandler {
 
 //     fn response(&mut self, req: &Request, resp: &mut Response) -> Option<Response> {
 //         match resp.get_headers("Content-Encoding").head() {
-//             Some(&~"gzip") => {
+//             Some(&"gzip".to_owned()) => {
 //                 let gzreader = compress::GzipReaderWrapper::new(resp.sock);
 //                 let mut bufreader = io::BufferedReader::new(gzreader);
 //                 resp.sock = &mut bufreader as &mut Buffer;
@@ -443,7 +443,7 @@ impl CookieJar {
 
     pub fn set_cookie_if_ok(&mut self, ck: Cookie, req: &Request) {
         let domain = ck.clone().domain.unwrap_or(req.uri.clone().host);
-        let path = ck.clone().path.unwrap_or(~"/");
+        let path = ck.clone().path.unwrap_or("/".to_owned());
         // TODO: add simple Cookie polocy here
         self.set_cookie(domain, path, ck);
     }
@@ -528,7 +528,7 @@ impl<'a> Response<'a> {
                 headers.insert_or_update_with(k.to_ascii_lower(), vec!(v.into_owned()),
                                               |_k, ov| ov.push(v.into_owned()));
             } else {
-                if [~"\r\n", ~"\n", ~""].contains(&line) {
+                if ["\r\n".to_owned(), "\n".to_owned(), "".to_owned()].contains(&line) {
                     break;
                 }
                 fail!("malformatted line");
@@ -699,7 +699,7 @@ mod test {
 
     #[test]
     fn test_header_case() {
-        assert_eq!(to_header_case("X-ForWard-For"), ~"X-Forward-For");
-        assert_eq!(to_header_case("accept-encoding"), ~"Accept-Encoding");
+        assert_eq!(to_header_case("X-ForWard-For"), "X-Forward-For".to_owned());
+        assert_eq!(to_header_case("accept-encoding"), "Accept-Encoding".to_owned());
     }
 }
