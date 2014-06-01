@@ -3,14 +3,12 @@ Compress library. wrapper from zlib.
  */
 
 use libc::{c_char, c_int};
-use std::cast;
 use std::vec::Vec;
 use std::ptr;
 use std::io;
 use std::io::IoResult;
-use std::mem::{size_of, init};
-
-mod zlib;
+use std::mem;
+use zlib;
 
 static Z_OK           : c_int = 0;
 static Z_STREAM_END   : c_int = 1;
@@ -48,9 +46,9 @@ pub struct GzipReader<R> {
 impl<R:Reader> GzipReader<R> {
     pub fn new(r: R) -> GzipReader<R> {
         static cap : uint = 65536;
-        let mut strm = unsafe { init::<zlib::z_stream>() };
+        let mut strm = unsafe { mem::zeroed::<zlib::z_stream>() };
         let ret = unsafe {
-            zlib::inflateInit2_(&mut strm, 47, zlib::zlibVersion(), size_of::<zlib::z_stream>() as i32)
+            zlib::inflateInit2_(&mut strm, 47, zlib::zlibVersion(), mem::size_of::<zlib::z_stream>() as i32)
         };
         assert_eq!(ret, Z_OK);
         let mut buf = Vec::with_capacity(cap);
@@ -85,7 +83,7 @@ impl<R:Reader> Reader for GzipReader<R> {
                 _ => unreachable!()
             }
         }
-        strm.next_out = unsafe { cast::transmute(&buf[0]) };
+        strm.next_out = unsafe { mem::transmute(&buf[0]) };
         strm.avail_out = out_len as u32;
 
         let ret = unsafe { zlib::inflate(strm, Z_NO_FLUSH) };
@@ -96,8 +94,8 @@ impl<R:Reader> Reader for GzipReader<R> {
         if strm.avail_in != 0 { // out buf too small
             // strm.next_in will move to current ptr
             unsafe {
-                ptr::copy_memory::<c_char>(cast::transmute(self.buf.as_mut_ptr()),
-                                           cast::transmute(strm.next_in),
+                ptr::copy_memory::<c_char>(mem::transmute(self.buf.as_mut_ptr()),
+                                           mem::transmute(strm.next_in),
                                            strm.avail_in as uint);
             }
             self.buf_len = strm.avail_in as uint;
@@ -122,9 +120,9 @@ pub struct GzipReaderWrapper<'a> {
 impl<'a> GzipReaderWrapper<'a> {
     pub fn new(r: &'a mut Buffer) -> GzipReaderWrapper {
         static cap : uint = 65536;
-        let mut strm = unsafe { init::<zlib::z_stream>() };
+        let mut strm = unsafe { mem::zeroed::<zlib::z_stream>() };
         let ret = unsafe {
-            zlib::inflateInit2_(&mut strm, 47, zlib::zlibVersion(), size_of::<zlib::z_stream>() as i32)
+            zlib::inflateInit2_(&mut strm, 47, zlib::zlibVersion(), mem::size_of::<zlib::z_stream>() as i32)
         };
         assert_eq!(ret, Z_OK);
         let mut buf = Vec::with_capacity(cap);
@@ -160,7 +158,7 @@ impl<'a> Reader for GzipReaderWrapper<'a> {
                 _ => unreachable!()
             }
         }
-        strm.next_out = unsafe { cast::transmute(&buf[0]) };
+        strm.next_out = unsafe { mem::transmute(&buf[0]) };
         strm.avail_out = out_len as u32;
 
         let ret = unsafe { zlib::inflate(strm, Z_NO_FLUSH) };
@@ -171,8 +169,8 @@ impl<'a> Reader for GzipReaderWrapper<'a> {
         if strm.avail_in != 0 { // out buf too small
             // strm.next_in will move to current ptr
             unsafe {
-                ptr::copy_memory::<c_char>(cast::transmute(self.buf.as_mut_ptr()),
-                                           cast::transmute(strm.next_in),
+                ptr::copy_memory::<c_char>(mem::transmute(self.buf.as_mut_ptr()),
+                                           mem::transmute(strm.next_in),
                                            strm.avail_in as uint);
             }
             self.buf_len = strm.avail_in as uint;
@@ -200,7 +198,7 @@ mod test {
                                 0x02, 0x00, 0x55, 0x0b, 0xfc, 0xa0, 0x05, 0x00, 0x00, 0x00];
         let src = io::BufReader::new(gz_file_content);
         let mut dst = GzipReader::new(src);
-        assert_eq!(dst.read_to_str().unwrap(), "fuck\n".to_owned());
+        assert_eq!(dst.read_to_str().unwrap(), "fuck\n".to_string());
     }
 
     #[test]
@@ -210,7 +208,7 @@ mod test {
                                 0x02, 0x00, 0x55, 0x0b, 0xfc, 0xa0, 0x05, 0x00, 0x00, 0x00];
         let src = io::BufReader::new(gz_file_content);
         let mut dst = GzipReader::new(src);
-        assert_eq!(dst.read_to_str().unwrap(), "fuck\n".to_owned());
-        assert_eq!(dst.read_to_str().unwrap(), "".to_owned());
+        assert_eq!(dst.read_to_str().unwrap(), "fuck\n".to_string());
+        assert_eq!(dst.read_to_str().unwrap(), "".to_string());
     }
 }

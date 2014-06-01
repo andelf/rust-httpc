@@ -3,6 +3,7 @@
 
 #![feature(globs, macro_rules)]
 
+extern crate debug;
 extern crate httpc;
 extern crate time;
 extern crate serialize;
@@ -22,23 +23,23 @@ macro_rules! nslog {
 // FIXME: how to implement optional field
 #[deriving(Decodable, Encodable)]
 pub struct YoudaoBasic {
-//    phonetic: Option<~str>,
-    explains: ~[~str],
+//    phonetic: Option<String>,
+    explains: Vec<String>,
 }
 
 #[deriving(Decodable, Encodable)]
 pub struct YoudaoWeb {
-    key: ~str,
-    value: ~[~str],
+    key: String,
+    value: Vec<String>,
 }
 
 #[deriving(Decodable, Encodable)]
 pub struct Youdao {
     errorCode: int,
-    query: ~str,
-    translation: ~[~str],
+    query: String,
+    translation: Vec<String>,
     basic: YoudaoBasic,
-    web: ~[YoudaoWeb],
+    web: Vec<YoudaoWeb>,
 }
 
 
@@ -48,9 +49,9 @@ fn main() {
         fail!("useage: {:?} word", os::self_exe_name().unwrap())
     }
     let word = args[0];
-    let params = vec!(("keyfrom".to_owned(), "neup204".to_owned()), ("key".to_owned(), "1844139492".to_owned()),
-                      ("type".to_owned(), "data".to_owned()), ("doctype".to_owned(), "json".to_owned()),
-                      ("version".to_owned(), "1.1".to_owned()), ("q".to_owned(), word.into_owned()));
+    let params = vec!(("keyfrom".to_string(), "neup204".to_string()), ("key".to_string(), "1844139492".to_string()),
+                      ("type".to_string(), "data".to_string()), ("doctype".to_string(), "json".to_string()),
+                      ("version".to_string(), "1.1".to_string()), ("q".to_string(), word.into_string()));
     let mut url : Url = from_str("http://fanyi.youdao.com/openapi.do").unwrap();
     url.query = params;
     nslog!("url = {}", url.to_str());

@@ -14,6 +14,7 @@ extern crate url;
 extern crate collections;
 extern crate time;
 extern crate libc;
+extern crate debug;
 
 use std::io;
 use std::io::net::addrinfo::get_host_addresses;
@@ -22,7 +23,6 @@ use std::io::net::tcp::TcpStream;
 use std::io::BufferedReader;
 use std::io::IoResult;
 
-use std::str;
 use std::vec::Vec;
 
 use std::cmp::min;
@@ -41,14 +41,14 @@ pub use urlencode = url::query_to_str;
 /// Url implementation
 pub use url::Url;
 
-
-
 pub use cookie::Cookie;
+
+mod zlib;
 
 static USER_AGENT : &'static str = "Rust-http-helper/0.1dev";
 static HTTP_PORT : u16 = 80;
 
-#[deriving(Eq, Show)]
+#[deriving(PartialEq, Show)]
 pub enum HttpMethod {
     OPTIONS,
     GET,
@@ -69,8 +69,8 @@ pub enum HttpVersion {
 impl Show for HttpVersion {
     fn fmt(&self, f: &mut Formatter) -> Result {
         match *self {
-            HTTP_1_1 => f.buf.write(bytes!("HTTP/1.1")),
-            HTTP_1_0 => f.buf.write(bytes!("HTTP/1.0")),
+            HTTP_1_1 => write!(f, "HTTP/1.1"),
+            HTTP_1_0 => write!(f, "HTTP/1.0"),
         }
     }
 }
@@ -80,7 +80,7 @@ pub struct Request<'a> {
     pub version: HttpVersion,
     pub uri: Url,
     pub method: HttpMethod,
-    pub headers: HashMap<~str, Vec<~str>>,
+    pub headers: HashMap<String, Vec<String>>,
     pub content: Vec<u8>,
 }
 
@@ -88,8 +88,8 @@ impl<'a> Request<'a> {
     pub fn with_url(uri: &Url) -> Request {
         // fix empty path
         let mut uri = uri.clone();
-        if uri.path == "".to_owned() {
-            uri.path = "/".to_owned();
+        if uri.path == "".to_string() {
+            uri.path = "/".to_string();
         }
         Request { version: HTTP_1_1, uri: uri, method: GET,
                   headers: HashMap::new(),
@@ -103,18 +103,18 @@ impl<'a> Request<'a> {
     // clean old header add new header
     pub fn set_header(&mut self, key: &str, value: &str) {
         self.headers.insert(key.to_ascii_lower(),
-                            vec!(value.into_owned()));
+                            vec!(value.into_string()));
     }
 
     // add new header value to exist value
     pub fn add_header(&mut self, key: &str, value: &str) {
         self.headers.insert_or_update_with(key.to_ascii_lower(),
-                                           vec!(value.into_owned()),
-                                           |_k,v| v.push(value.into_owned()));
+                                           vec!(value.into_string()),
+                                           |_k,v| v.push(value.into_string()));
     }
 
-    pub fn get_headers(&self, header_name: &str) -> Vec<~str> {
-        let mut ret : Vec<~str> = Vec::new();
+    pub fn get_headers(&self, header_name: &str) -> Vec<String> {
+        let mut ret : Vec<String> = Vec::new();
         match self.headers.find(&header_name.to_ascii_lower()) {
             Some(hdrs) => for hdr in hdrs.iter() {
                 ret.push(hdr.clone())
@@ -129,10 +129,10 @@ impl<'a> Request<'a> {
         write!(w, "{} ", self.method.to_str());
 
         // /path
-        w.write_str(self.uri.path);
+        w.write_str(self.uri.path.as_slice());
         if !self.uri.query.is_empty() {
             w.write_char('?');
-            w.write_str(urlencode(&self.uri.query));
+            w.write_str(urlencode(&self.uri.query).as_slice());
         }
 
         write!(w, " {}", self.version.to_str());
@@ -141,10 +141,10 @@ impl<'a> Request<'a> {
 
         // headers
         for (k, vs) in self.headers.iter() {
-            w.write_str(*k);
+            w.write_str(k.as_slice());
             w.write_str(": ");
             for (i, v) in vs.iter().enumerate() {
-                w.write_str(*v);
+                w.write_str(v.as_slice());
                 // FIXME: multi-value header line
                 if i > 0 { w.write_str("; "); }
             }
@@ -163,21 +163,21 @@ impl<'a> Request<'a> {
     }
 }
 
-pub fn to_header_case(key: &str) -> ~str {
-    let mut ret = StrBuf::new();
+pub fn to_header_case(key: &str) -> String {
+    let mut ret = String::new();
     let mut flag_is_at_words_begin = true;
     for c in key.as_bytes().iter() {
         if flag_is_at_words_begin {
-            ret.push_char(c.to_ascii().to_upper().to_char());
+            ret.push_char(c.to_ascii().to_uppercase().to_char());
             flag_is_at_words_begin = false;
         } else {
-            ret.push_char(c.to_ascii().to_lower().to_char());
+            ret.push_char(c.to_ascii().to_lowercase().to_char());
         }
         if *c == '-' as u8 {
             flag_is_at_words_begin = true;
         }
     }
-    ret.into_owned()
+    ret
 }
 
 #[allow(unused_variable)]
@@ -202,19 +202,19 @@ impl Handler for HTTPHandler {
     fn before_request(&mut self, req: &mut Request) {
         let uri = req.uri.clone();
         let host = uri.port.map_or(req.uri.host.clone(), |p| format!("{}:{}", req.uri.host, p));
-        req.headers.find_or_insert("host".to_owned(), vec!(host));
+        req.headers.find_or_insert("host".to_string(), vec!(host));
 
-        req.headers.find_or_insert("user-agent".to_owned(), vec!(USER_AGENT.into_owned()));
+        req.headers.find_or_insert("user-agent".to_string(), vec!(USER_AGENT.into_string()));
 
         // partly support x-deflate.
-        req.headers.find_or_insert("accept-encoding".to_owned(), vec!("identity".to_owned()));
+        req.headers.find_or_insert("accept-encoding".to_string(), vec!("identity".to_string()));
 
-        req.headers.find_or_insert("connection".to_owned(), vec!("close".to_owned()));
+        req.headers.find_or_insert("connection".to_string(), vec!("close".to_string()));
 
         match req.method {
             POST | PUT => {
-                req.headers.find_or_insert("content-length".to_owned(), vec!(req.content.len().to_str()));
-                req.headers.find_or_insert("content-type".to_owned(), vec!("application/x-www-form-urlencoded".to_owned()));
+                req.headers.find_or_insert("content-length".to_string(), vec!(req.content.len().to_str()));
+                req.headers.find_or_insert("content-type".to_string(), vec!("application/x-www-form-urlencoded".to_string()));
             },
             _          => (),
         }
@@ -235,7 +235,7 @@ impl Handler for HTTPHandler {
 
 //     fn response(&mut self, req: &Request, resp: &mut Response) -> Option<Response> {
 //         match resp.get_headers("Content-Encoding").head() {
-//             Some(&"gzip".to_owned()) => {
+//             Some(&"gzip".to_string()) => {
 //                 let gzreader = compress::GzipReaderWrapper::new(resp.sock);
 //                 let mut bufreader = io::BufferedReader::new(gzreader);
 //                 resp.sock = &mut bufreader as &mut Buffer;
@@ -277,10 +277,10 @@ impl Handler for HTTPRedirectHandler {
                     None => fail!("Protocal error: redirect without Location header")
                 }
             };
-            let mut newreq = Request::with_url(&from_str(newurl).unwrap());
+            let mut newreq = Request::with_url(&from_str(newurl.as_slice()).unwrap());
             for (k, vs) in req.headers.iter() {
                 for v in vs.iter() {
-                    newreq.add_header(*k, *v);
+                    newreq.add_header(k.as_slice(), v.as_slice());
                 }
             }
             println!("new req => {:?}", newreq);
@@ -307,12 +307,12 @@ impl HTTPCookieProcessor {
 impl Handler for HTTPCookieProcessor {
     fn before_request(&mut self, req: &mut Request) {
         for ck in self.jar.cookies_for_request(req).iter() {
-            req.add_header("Cookie", ck.to_header());
+            req.add_header("Cookie", ck.to_header().as_slice());
         }
     }
     fn after_response(&mut self, req: &Request, resp: &mut Response) -> Option<Response> {
         for cookie_header in resp.get_headers("set-cookie").iter() {
-            let ck_opt = from_str::<Cookie>(*cookie_header);
+            let ck_opt : Option<Cookie> = from_str(cookie_header.as_slice());
             if ck_opt.is_some() {
                 let ck = ck_opt.unwrap();
                 self.jar.set_cookie_if_ok(ck, req);
@@ -329,20 +329,20 @@ impl Handler for HTTPCookieProcessor {
 
 
 pub struct OpenDirector {
-    pub handlers: Vec<~Handler>,
+    pub handlers: Vec<Box<Handler>>,
     pub max_redirect: int,
 }
 
 impl OpenDirector {
     pub fn new() -> OpenDirector {
-        OpenDirector { handlers: vec!(~HTTPHandler::new()         as ~Handler,
-                                      ~HTTPCookieProcessor::new() as ~Handler,
-                                      ~HTTPRedirectHandler::new() as ~Handler),
+        OpenDirector { handlers: vec!( box HTTPHandler::new() as Box<Handler>,
+                                       box HTTPCookieProcessor::new() as Box<Handler>,
+                                       box HTTPRedirectHandler::new() as Box<Handler>),
                        max_redirect: 10,
         }
     }
 
-    pub fn add_handler(&mut self, h: ~Handler) {
+    pub fn add_handler(&mut self, h: Box<Handler>) {
         self.handlers.push(h);
     }
 
@@ -357,11 +357,11 @@ impl OpenDirector {
         }
 
         let uri = req.uri.clone();
-        let port = uri.port.clone().and_then(|p| from_str(p)).unwrap_or(HTTP_PORT);
-        let ips = get_host_addresses(uri.host).unwrap();
-        let addr = SocketAddr { ip: ips.head().unwrap().clone(), port: port };
+        let port = uri.port.clone().and_then(|p| from_str(p.as_slice())).unwrap_or(HTTP_PORT);
+        let ips = get_host_addresses(uri.host.as_slice()).unwrap();
+        let addr = SocketAddr { ip: ips.get(0).clone(), port: port };
 
-        let mut stream = TcpStream::connect(addr).unwrap();
+        let mut stream = TcpStream::connect(addr.ip.to_str().as_slice(), addr.port).unwrap();
 
         req.write_request(&mut stream);
 
@@ -400,7 +400,7 @@ pub fn build_opener() -> OpenDirector {
 
 pub struct CookieJar {
     // [Domain Path Name]
-    pub cookies: HashMap<~str, HashMap<~str, HashMap<~str, Cookie>>>
+    pub cookies: HashMap<String, HashMap<String, HashMap<String, Cookie>>>
 }
 
 #[allow(unused_mut)]
@@ -410,8 +410,8 @@ impl CookieJar {
     }
 
     pub fn set_cookie(&mut self, domain: &str, path: &str, ck: Cookie) {
-        let domain = domain.into_owned();
-        let path = path.into_owned();
+        let domain = domain.into_string();
+        let path = path.into_string();
         let name = ck.clone().name;
         let mut m1 = &mut self.cookies;
         if m1.contains_key(&domain) {
@@ -433,8 +433,8 @@ impl CookieJar {
         }
     }
     pub fn process_response(&mut self, req: &Request, resp: &Response) {
-        for set_ck in resp.get_headers("Set-Cookie".to_ascii_lower()).iter() {
-            let ck_opt = from_str::<Cookie>(*set_ck);
+        for set_ck in resp.get_headers("Set-Cookie".to_ascii_lower().as_slice()).iter() {
+            let ck_opt: Option<Cookie> = from_str(set_ck.as_slice());
             assert!(ck_opt.is_some());
             let ck = ck_opt.unwrap();
             self.set_cookie_if_ok(ck, req);
@@ -443,9 +443,9 @@ impl CookieJar {
 
     pub fn set_cookie_if_ok(&mut self, ck: Cookie, req: &Request) {
         let domain = ck.clone().domain.unwrap_or(req.uri.clone().host);
-        let path = ck.clone().path.unwrap_or("/".to_owned());
+        let path = ck.clone().path.unwrap_or("/".to_string());
         // TODO: add simple Cookie polocy here
-        self.set_cookie(domain, path, ck);
+        self.set_cookie(domain.as_slice(), path.as_slice(), ck);
     }
 
 
@@ -460,11 +460,11 @@ impl CookieJar {
         let mut ret = Vec::new();
         // find domain
         for d in m1.keys() {
-            if (d.starts_with(".") && domain.ends_with(*d)) || str::eq(d, &domain) {
+            if (d.as_slice().starts_with(".") && domain.as_slice().ends_with(d.as_slice())) || d.eq(&domain) {
                 let m2 = m1.find(d).unwrap();
                 // find path
                 for p in m2.keys() {
-                    if path.starts_with(*p) {
+                    if path.as_slice().starts_with(p.as_slice()) {
                         // find key
                         let m3 = m2.find(p).unwrap();
                         for ck in m3.values() {
@@ -484,8 +484,8 @@ impl CookieJar {
 pub struct Response<'a> {
     pub version: HttpVersion,
     pub status: int,
-    pub reason: ~str,
-    pub headers: HashMap<~str, Vec<~str>>,
+    pub reason: String,
+    pub headers: HashMap<String, Vec<String>>,
 
     chunked: bool,
     chunked_left: Option<uint>,
@@ -495,7 +495,7 @@ pub struct Response<'a> {
     // FIXME: maybe a rust bug here
     // when using Buffer/Reader traits here, program will hangs at main() ends
     // gdb shows that epoll_wait with timeout=-1, and pthread_cond_wait()
-    sock: ~TcpStream,
+    sock: TcpStream,
     eof: bool,
 }
 
@@ -504,7 +504,7 @@ impl<'a> Response<'a> {
         let mut stream = BufferedReader::with_capacity(1, s.clone());
 
         let line = stream.read_line().unwrap(); // status line
-        let segs = line.splitn(' ', 2).collect::<Vec<&str>>();
+        let segs = line.as_slice().splitn(' ', 2).collect::<Vec<&str>>();
 
         let version = match *segs.get(0) {
             "HTTP/1.1"                  => HTTP_1_1,
@@ -521,14 +521,14 @@ impl<'a> Response<'a> {
         let mut headers = HashMap::new();
         loop {
             let line = stream.read_line().unwrap();
-            let segs = line.splitn(':', 1).collect::<Vec<&str>>();
+            let segs = line.as_slice().splitn(':', 1).collect::<Vec<&str>>();
             if segs.len() == 2 {
                 let k = segs.get(0).trim();
                 let v = segs.get(1).trim();
-                headers.insert_or_update_with(k.to_ascii_lower(), vec!(v.into_owned()),
-                                              |_k, ov| ov.push(v.into_owned()));
+                headers.insert_or_update_with(k.to_ascii_lower(), vec!(v.into_string()),
+                                              |_k, ov| ov.push(v.into_string()));
             } else {
-                if ["\r\n".to_owned(), "\n".to_owned(), "".to_owned()].contains(&line) {
+                if ["\r\n".to_string(), "\n".to_string(), "".to_string()].contains(&line) {
                     break;
                 }
                 fail!("malformatted line");
@@ -537,8 +537,8 @@ impl<'a> Response<'a> {
 
         let mut chunked = false;
         for (k, v) in headers.iter() {
-            if k.eq_ignore_ascii_case("transfer-encoding") {
-                if v.get(0).eq_ignore_ascii_case("chunked") {
+            if k.as_slice().eq_ignore_ascii_case("transfer-encoding") {
+                if v.get(0).as_slice().eq_ignore_ascii_case("chunked") {
                     chunked = true;
                 }
                 break;
@@ -549,20 +549,20 @@ impl<'a> Response<'a> {
         if !chunked {
             length = match headers.find(&"Content-Length".to_ascii_lower()) {
                 None => None,
-                Some(v) => from_str::<uint>(*v.get(0)),
+                Some(v) => from_str::<uint>(v.get(0).as_slice()),
             }
         }
 
         debug!("HTTP Response chunked={} length={}", chunked, length);
 
-        Response { version: version, status: status, reason: reason.into_owned(),
+        Response { version: version, status: status, reason: reason.into_string(),
                    headers: headers,
                    chunked: chunked, chunked_left: None,
                    length: length, length_left: length.unwrap_or(0),
-                   sock: ~s.clone(), eof: false }
+                   sock: s.clone(), eof: false }
     }
 
-    pub fn get_headers(&self, header_name: &str) -> Vec<~str> {
+    pub fn get_headers(&self, header_name: &str) -> Vec<String> {
         let mut ret = Vec::new();
         match self.headers.find(&header_name.to_ascii_lower()) {
             Some(hdrs) => for hdr in hdrs.iter() {
@@ -574,7 +574,7 @@ impl<'a> Response<'a> {
     }
 
     fn read_next_chunk_size(&mut self) -> Option<uint> {
-        let mut line = StrBuf::new();
+        let mut line = String::new();
         static MAXNUM_SIZE : uint = 16; // 16 hex digits
         static HEX_CHARS : &'static [u8] = bytes!("0123456789abcdefABCDEF");
         let mut is_in_chunk_extension = false;
@@ -699,7 +699,7 @@ mod test {
 
     #[test]
     fn test_header_case() {
-        assert_eq!(to_header_case("X-ForWard-For"), "X-Forward-For".to_owned());
-        assert_eq!(to_header_case("accept-encoding"), "Accept-Encoding".to_owned());
+        assert_eq!(to_header_case("X-ForWard-For"), "X-Forward-For".to_string());
+        assert_eq!(to_header_case("accept-encoding"), "Accept-Encoding".to_string());
     }
 }

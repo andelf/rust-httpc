@@ -1,5 +1,5 @@
 #![feature(globs)]
-
+extern crate debug;
 extern crate httpc;
 
 use httpc::*;

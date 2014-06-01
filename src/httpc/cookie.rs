@@ -8,13 +8,13 @@ use std::ascii::StrAsciiExt;
 
 // TODO: how to express not provided in header line
 // TODO: handle port
-#[deriving(Eq, Clone)]
+#[deriving(PartialEq, Clone)]
 pub struct Cookie {
-    pub name: ~str,
-    pub value: ~str,
-    pub domain: Option<~str>,
-    pub path: Option<~str>,
-    pub comment: Option<~str>,
+    pub name: String,
+    pub value: String,
+    pub domain: Option<String>,
+    pub path: Option<String>,
+    pub comment: Option<String>,
     pub secure: bool,
     pub http_only: bool,
     pub version: int,
@@ -24,7 +24,7 @@ pub struct Cookie {
 
 impl Cookie {
     pub fn new_with_name_value(name: &str, value: &str) -> Cookie {
-        Cookie { name: name.into_owned(), value: value.into_owned(),
+        Cookie { name: name.into_string(), value: value.into_string(),
                  domain: None, path: None, comment: None,
                  secure: false, http_only: false,
                  version: 0, created: now_utc(),
@@ -33,7 +33,7 @@ impl Cookie {
 }
 
 impl Cookie {
-    pub fn to_header(&self) -> ~str {
+    pub fn to_header(&self) -> String {
         format!("{}={}", self.name, self.value)
     }
 
@@ -51,19 +51,19 @@ impl Cookie {
 
 impl Show for Cookie {
     fn fmt(&self, f: &mut Formatter) -> Result {
-        f.buf.write_str(format!("{}={}", self.name, self.value));
+        write!(f, "{}={}", self.name, self.value);
         if !self.expires.is_none() {
-            f.buf.write_str(format!("; expires={}",
-                                    strftime("%a, %d-%b-%Y %H:%M:%S %Z", &self.expires.clone().unwrap())));
+            write!(f, "; expires={}",
+                   strftime("%a, %d-%b-%Y %H:%M:%S %Z", &self.expires.clone().unwrap()));
         }
         if !self.path.is_none() {
-            f.buf.write_str(format!("; path={}", self.path.clone().unwrap()));
+            write!(f, "; path={}", self.path.clone().unwrap());
         }
         if !self.domain.is_none() {
-            f.buf.write_str(format!("; domain={}", self.domain.clone().unwrap()));
+            write!(f, "; domain={}", self.domain.clone().unwrap());
         }
         if self.http_only {
-            f.buf.write_str("; HttpOnly");
+            write!(f, "; HttpOnly");
         }
         Ok(())
     }
@@ -79,11 +79,11 @@ impl FromStr for Cookie {
         let mut ck = Cookie::new_with_name_value(name, value);
         for seg in segs.collect::<Vec<&str>>().iter() {
             if seg.find('=').is_some() {
-                let kv = seg.trim().splitn('=', 1).collect::<~[&str]>();
-                match kv[0].to_ascii_lower().as_slice() {
+                let kv = seg.trim().splitn('=', 1).collect::<Vec<&str>>();
+                match kv.get(0).to_ascii_lower().as_slice() {
                     // TODO: GMT vs UTC
                     "expires" => {
-                        ck.expires = match strptime(kv[1], "%a, %d-%b-%y %H:%M:%S %Z") {
+                        ck.expires = match strptime(kv.get(1).as_slice(), "%a, %d-%b-%y %H:%M:%S %Z") {
                             Ok(tm) => { // 2-digits year format is buggy
                                 let mut tm = tm;
                                 if tm.tm_year < 1950 {
@@ -91,7 +91,7 @@ impl FromStr for Cookie {
                                 }
                                 Some(tm)
                             }
-                            Err(_) => match strptime(kv[1], "%a, %d-%b-%Y %H:%M:%S %Z") {
+                            Err(_) => match strptime(kv.get(1).as_slice(), "%a, %d-%b-%Y %H:%M:%S %Z") {
                                 Err(_) => None,
                                 Ok(tm) => Some(tm)
                             },
@@ -100,14 +100,14 @@ impl FromStr for Cookie {
                     }
                     // max-age may override expires with a bigger val
                     "max-age" => {
-                        let age : i64 = from_str(kv[1]).unwrap();
+                        let age : i64 = from_str(kv.get(1).as_slice()).unwrap();
                         let mut ts = time::get_time();
                         ts.sec += age;
                         let tm = time::at_utc(ts);
                         ck.expires = Some(tm)
                     }
-                    "path"    => { ck.path = Some(kv[1].into_owned()) }
-                    "domain"  => { ck.domain = Some(kv[1].into_owned()) }
+                    "path"    => { ck.path = Some(kv.get(1).into_string()) }
+                    "domain"  => { ck.domain = Some(kv.get(1).into_string()) }
                     "version" => (),
                     _ => { println!("unknown kv => {:?}", kv); }
                 }
@@ -133,8 +133,8 @@ mod test {
         let ck_opt = from_str::<Cookie>(header);
         assert!(ck_opt.is_some());
         let ck = ck_opt.unwrap();
-        assert_eq!(ck.to_header(), "ASPSESSIONIDQARTTCBD=JOACNNHAPHHFCFPGOFILBMJF".to_owned());
-        assert_eq!(ck.path, Some("/".to_owned()));
+        assert_eq!(ck.to_header(), "ASPSESSIONIDQARTTCBD=JOACNNHAPHHFCFPGOFILBMJF".to_string());
+        assert_eq!(ck.path, Some("/".to_string()));
     }
 
     #[test]
@@ -143,7 +143,7 @@ mod test {
         let ck_opt = from_str::<Cookie>(header);
         assert!(ck_opt.is_some());
         let ck = ck_opt.unwrap();
-        assert_eq!(ck.to_header(), "BAIDUID=1AC4B89822952E9611807601CBC7FED4:FG=1".to_owned());
+        assert_eq!(ck.to_header(), "BAIDUID=1AC4B89822952E9611807601CBC7FED4:FG=1".to_string());
         assert!(!ck.is_expired());
     }
 }
