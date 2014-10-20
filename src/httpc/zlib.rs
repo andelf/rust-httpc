@@ -6,10 +6,10 @@
 
 use libc::*;
 pub type alloc_func =
-    ::std::option::Option<extern "C" fn(arg1: *c_void, arg2: c_uint, arg3: c_uint)
-                              -> *c_void>;
+    ::std::option::Option<extern "C" fn(arg1: *const c_void, arg2: c_uint, arg3: c_uint)
+                              -> *const c_void>;
 pub type free_func =
-    ::std::option::Option<extern "C" fn(arg1: *c_void, arg2: *c_void)>;
+    ::std::option::Option<extern "C" fn(arg1: *const c_void, arg2: *const c_void)>;
 pub struct Struct_z_stream_s {
     pub next_in: *mut c_char,
     pub avail_in: c_uint,
@@ -21,7 +21,7 @@ pub struct Struct_z_stream_s {
     pub state: *mut Struct_internal_state,
     pub zalloc: alloc_func,
     pub zfree: free_func,
-    pub opaque: *c_void,
+    pub opaque: *const c_void,
     pub data_type: c_int,
     pub adler: c_ulong,
     pub reserved: c_ulong,
@@ -64,12 +64,12 @@ pub struct Struct_internal_state {
 }
 #[link(name = "z")]
 extern "C" {
-    pub fn zlibVersion() -> *c_char;
+    pub fn zlibVersion() -> *const c_char;
     pub fn deflate(strm: z_streamp, flush: c_int) -> c_int;
     pub fn deflateEnd(strm: z_streamp) -> c_int;
     pub fn inflate(strm: z_streamp, flush: c_int) -> c_int;
     pub fn inflateEnd(strm: z_streamp) -> c_int;
-    pub fn deflateSetDictionary(strm: z_streamp, dictionary: *c_char,
+    pub fn deflateSetDictionary(strm: z_streamp, dictionary: *const c_char,
                                 dictLength: c_uint) -> c_int;
     pub fn deflateCopy(dest: z_streamp, source: z_streamp) -> c_int;
     pub fn deflateReset(strm: z_streamp) -> c_int;
@@ -82,7 +82,7 @@ extern "C" {
                           bits: *mut c_int) -> c_int;
     pub fn deflatePrime(strm: z_streamp, bits: c_int, value: c_int) -> c_int;
     pub fn deflateSetHeader(strm: z_streamp, head: gz_headerp) -> c_int;
-    pub fn inflateSetDictionary(strm: z_streamp, dictionary: *c_char,
+    pub fn inflateSetDictionary(strm: z_streamp, dictionary: *const c_char,
                                 dictLength: c_uint) -> c_int;
     pub fn inflateGetDictionary(strm: z_streamp, dictionary: *mut c_char,
                                 dictLength: *mut c_uint) -> c_int;
@@ -97,20 +97,20 @@ extern "C" {
                        out: out_func, out_desc: *mut c_void) -> c_int;
     pub fn inflateBackEnd(strm: z_streamp) -> c_int;
     pub fn zlibCompileFlags() -> c_ulong;
-    pub fn compress(dest: *mut c_char, destLen: *mut c_ulong, source: *c_char,
+    pub fn compress(dest: *mut c_char, destLen: *mut c_ulong, source: *const c_char,
                     sourceLen: c_ulong) -> c_int;
-    pub fn compress2(dest: *mut c_char, destLen: *mut c_ulong, source: *c_char,
+    pub fn compress2(dest: *mut c_char, destLen: *mut c_ulong, source: *const c_char,
                      sourceLen: c_ulong, level: c_int) -> c_int;
     pub fn compressBound(sourceLen: c_ulong) -> c_ulong;
-    pub fn uncompress(dest: *mut c_char, destLen: *mut c_ulong, source: *c_char,
+    pub fn uncompress(dest: *mut c_char, destLen: *mut c_ulong, source: *const c_char,
                       sourceLen: c_ulong) -> c_int;
-    pub fn gzdopen(fd: c_int, mode: *c_char) -> gzFile;
+    pub fn gzdopen(fd: c_int, mode: *const c_char) -> gzFile;
     pub fn gzbuffer(file: gzFile, size: c_uint) -> c_int;
     pub fn gzsetparams(file: gzFile, level: c_int, strategy: c_int) -> c_int;
-    pub fn gzread(file: gzFile, buf: *c_void, len: c_uint) -> c_int;
-    pub fn gzwrite(file: gzFile, buf: *c_void, len: c_uint) -> c_int;
-    pub fn gzprintf(file: gzFile, format: *c_char, ...) -> c_int;
-    pub fn gzputs(file: gzFile, s: *c_char) -> c_int;
+    pub fn gzread(file: gzFile, buf: *const c_void, len: c_uint) -> c_int;
+    pub fn gzwrite(file: gzFile, buf: *const c_void, len: c_uint) -> c_int;
+    pub fn gzprintf(file: gzFile, format: *const c_char, ...) -> c_int;
+    pub fn gzputs(file: gzFile, s: *const c_char) -> c_int;
     pub fn gzgets(file: gzFile, buf: *mut c_char, len: c_int) ->
      *mut c_char;
     pub fn gzputc(file: gzFile, c: c_int) -> c_int;
@@ -123,34 +123,34 @@ extern "C" {
     pub fn gzclose(file: gzFile) -> c_int;
     pub fn gzclose_r(file: gzFile) -> c_int;
     pub fn gzclose_w(file: gzFile) -> c_int;
-    pub fn gzerror(file: gzFile, errnum: *mut c_int) -> *c_char;
+    pub fn gzerror(file: gzFile, errnum: *mut c_int) -> *const c_char;
     pub fn gzclearerr(file: gzFile);
-    pub fn adler32(adler: c_ulong, buf: *c_char, len: c_uint) -> c_ulong;
-    pub fn crc32(crc: c_ulong, buf: *c_char, len: c_uint) -> c_ulong;
-    pub fn deflateInit_(strm: z_streamp, level: c_int, version: *c_char,
+    pub fn adler32(adler: c_ulong, buf: *const c_char, len: c_uint) -> c_ulong;
+    pub fn crc32(crc: c_ulong, buf: *const c_char, len: c_uint) -> c_ulong;
+    pub fn deflateInit_(strm: z_streamp, level: c_int, version: *const c_char,
                         stream_size: c_int) -> c_int;
-    pub fn inflateInit_(strm: z_streamp, version: *c_char,
+    pub fn inflateInit_(strm: z_streamp, version: *const c_char,
                         stream_size: c_int) -> c_int;
     pub fn deflateInit2_(strm: z_streamp, level: c_int, method: c_int,
                          windowBits: c_int, memLevel: c_int, strategy: c_int,
-                         version: *c_char, stream_size: c_int) -> c_int;
+                         version: *const c_char, stream_size: c_int) -> c_int;
     pub fn inflateInit2_(strm: z_streamp, windowBits: c_int,
-                         version: *c_char, stream_size: c_int) -> c_int;
+                         version: *const c_char, stream_size: c_int) -> c_int;
     pub fn inflateBackInit_(strm: z_streamp, windowBits: c_int,
-                            window: *mut c_uchar, version: *c_char,
+                            window: *mut c_uchar, version: *const c_char,
                             stream_size: c_int) -> c_int;
     pub fn gzgetc_(file: gzFile) -> c_int;
-    pub fn gzopen(arg1: *c_char, arg2: *c_char) -> gzFile;
+    pub fn gzopen(arg1: *const c_char, arg2: *const c_char) -> gzFile;
     pub fn gzseek(arg1: gzFile, arg2: off_t, arg3: c_int) -> off_t;
     pub fn gztell(arg1: gzFile) -> off_t;
     pub fn gzoffset(arg1: gzFile) -> off_t;
     pub fn adler32_combine(arg1: c_ulong, arg2: c_ulong, arg3: off_t) -> c_ulong;
     pub fn crc32_combine(arg1: c_ulong, arg2: c_ulong, arg3: off_t) -> c_ulong;
-    pub fn zError(arg1: c_int) -> *c_char;
+    pub fn zError(arg1: c_int) -> *const c_char;
     pub fn inflateSyncPoint(arg1: z_streamp) -> c_int;
     // pub fn get_crc_table() -> *z_crc_t;
     pub fn inflateUndermine(arg1: z_streamp, arg2: c_int) -> c_int;
     pub fn inflateResetKeep(arg1: z_streamp) -> c_int;
     pub fn deflateResetKeep(arg1: z_streamp) -> c_int;
-    // pub fn gzvprintf(file: gzFile, format: *c_char, va: va_list) -> c_int;
+    // pub fn gzvprintf(file: gzFile, format: *const c_char, va: va_list) -> c_int;
 }

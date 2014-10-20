@@ -1,7 +1,7 @@
 #![desc = "A rust crate for http protocol"]
 #![license = "MIT"]
 
-#![crate_id = "github.com/andelf/rust-httpc#httpc:0.2"]
+#![crate_name = "httpc"]
 #![crate_type = "lib"]
 
 #![feature(globs, phase)]
@@ -34,10 +34,10 @@ use std::ascii::StrAsciiExt;
 //use std::ascii::AsciiStr;
 use std::num::from_str_radix;
 
-use collections::HashMap;
+use std::collections::HashMap;
 
-/// urlencode to encode querys
-pub use urlencode = url::query_to_str;
+/// urlencod to encode querys
+pub use url::query_to_str;
 /// Url implementation
 pub use url::Url;
 
@@ -132,7 +132,7 @@ impl<'a> Request<'a> {
         w.write_str(self.uri.path.as_slice());
         if !self.uri.query.is_empty() {
             w.write_char('?');
-            w.write_str(urlencode(&self.uri.query).as_slice());
+            w.write_str(query_to_str(&self.uri.query).as_slice());
         }
 
         write!(w, " {}", self.version.to_str());
