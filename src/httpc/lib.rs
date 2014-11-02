@@ -8,13 +8,12 @@
 #![allow(unused_must_use)]
 #![allow(dead_code)]
 
-#[phase(syntax, link)] extern crate log;
+#[phase(plugin, link)] extern crate log;
 
 extern crate url;
 extern crate collections;
 extern crate time;
 extern crate libc;
-extern crate debug;
 
 use std::io;
 use std::io::net::addrinfo::get_host_addresses;
@@ -30,14 +29,14 @@ use std::cmp::min;
 use std::fmt::{Show, Formatter, Result};
 
 // for to_ascii_lower, eq_ignore_ascii_case
-use std::ascii::StrAsciiExt;
+use std::ascii::AsciiExt;
 //use std::ascii::AsciiStr;
 use std::num::from_str_radix;
 
 use std::collections::HashMap;
 
 /// urlencod to encode querys
-pub use url::query_to_str;
+// missing
 /// Url implementation
 pub use url::Url;
 
@@ -87,17 +86,17 @@ pub struct Request<'a> {
 impl<'a> Request<'a> {
     pub fn with_url(uri: &Url) -> Request {
         // fix empty path
-        let mut uri = uri.clone();
-        if uri.path == "".to_string() {
-            uri.path = "/".to_string();
-        }
+        let uri = uri.clone();
+        // if uri.path == "".to_string() {
+        //     uri.path = "/".to_string();
+        // }
         Request { version: HTTP_1_1, uri: uri, method: GET,
                   headers: HashMap::new(),
                   content: Vec::new() }
     }
 
     pub fn add_body(&mut self, body: &[u8]) {
-        self.content = Vec::from_slice(body);
+        self.content = body.to_vec();
     }
 
     // clean old header add new header
@@ -108,9 +107,11 @@ impl<'a> Request<'a> {
 
     // add new header value to exist value
     pub fn add_header(&mut self, key: &str, value: &str) {
-        self.headers.insert_or_update_with(key.to_ascii_lower(),
-                                           vec!(value.into_string()),
-                                           |_k,v| v.push(value.into_string()));
+        if self.headers.contains_key(&key.to_string()) {
+            self.headers.find_mut(&key.to_string()).unwrap().push(value.into_string());
+        } else {
+            self.headers.insert(key.to_ascii_lower(), vec!(value.into_string()));
+        }
     }
 
     pub fn get_headers(&self, header_name: &str) -> Vec<String> {
@@ -126,16 +127,18 @@ impl<'a> Request<'a> {
 
     pub fn write_request(&self, w: &mut Writer) -> IoResult<()> {
         // METHOD /path HTTP/v.v
-        write!(w, "{} ", self.method.to_str());
+        write!(w, "{} ", self.method.to_string());
 
         // /path
-        w.write_str(self.uri.path.as_slice());
-        if !self.uri.query.is_empty() {
+        let uri = self.uri.clone();
+        w.write_str(uri.serialize_path().unwrap().as_slice());
+        uri.query.map(|query| {
             w.write_char('?');
-            w.write_str(query_to_str(&self.uri.query).as_slice());
-        }
+            w.write_str(query.as_slice());
+        });
+            // w.write_str(url::form_urlencoded::serialize(self.uri.query, None).as_slice());
 
-        write!(w, " {}", self.version.to_str());
+        write!(w, " {}", self.version.to_string());
 
         w.write_str("\r\n");
 
@@ -168,10 +171,10 @@ pub fn to_header_case(key: &str) -> String {
     let mut flag_is_at_words_begin = true;
     for c in key.as_bytes().iter() {
         if flag_is_at_words_begin {
-            ret.push_char(c.to_ascii().to_uppercase().to_char());
+            ret.push(c.to_ascii().to_uppercase().to_char());
             flag_is_at_words_begin = false;
         } else {
-            ret.push_char(c.to_ascii().to_lowercase().to_char());
+            ret.push(c.to_ascii().to_lowercase().to_char());
         }
         if *c == '-' as u8 {
             flag_is_at_words_begin = true;
@@ -180,7 +183,7 @@ pub fn to_header_case(key: &str) -> String {
     ret
 }
 
-#[allow(unused_variable)]
+#[allow(unused_variables)]
 pub trait Handler {
     fn before_request(&mut self, req: &mut Request) {}
     fn after_response(&mut self, req: &Request, resp: &mut Response) -> Option<Response> { None }
@@ -201,20 +204,19 @@ impl HTTPHandler {
 impl Handler for HTTPHandler {
     fn before_request(&mut self, req: &mut Request) {
         let uri = req.uri.clone();
-        let host = uri.port.map_or(req.uri.host.clone(), |p| format!("{}:{}", req.uri.host, p));
-        req.headers.find_or_insert("host".to_string(), vec!(host));
+        let host = uri.port().map_or(uri.domain().unwrap().to_string(), |p| format!("{}:{}", uri.domain().unwrap(), p));
+        req.headers["host".to_string()] = vec!(host.to_string());
 
-        req.headers.find_or_insert("user-agent".to_string(), vec!(USER_AGENT.into_string()));
+        req.headers["user-agent".to_string()] = vec!(USER_AGENT.into_string());
 
         // partly support x-deflate.
-        req.headers.find_or_insert("accept-encoding".to_string(), vec!("identity".to_string()));
-
-        req.headers.find_or_insert("connection".to_string(), vec!("close".to_string()));
+        req.headers["accept-encoding".to_string()] = vec!("identity".to_string());
+        req.headers["connection".to_string()] = vec!("close".to_string());
 
         match req.method {
             POST | PUT => {
-                req.headers.find_or_insert("content-length".to_string(), vec!(req.content.len().to_str()));
-                req.headers.find_or_insert("content-type".to_string(), vec!("application/x-www-form-urlencoded".to_string()));
+                req.headers["content-length".to_string()] = vec!(req.content.len().to_string());
+                req.headers["content-type".to_string()] = vec!["application/x-www-form-urlencoded".to_string()];
             },
             _          => (),
         }
@@ -274,16 +276,16 @@ impl Handler for HTTPRedirectHandler {
                 Some(u) => u.clone(),
                 None => match resp.get_headers("uri").last() {
                     Some(u) => u.clone(),
-                    None => fail!("Protocal error: redirect without Location header")
+                    None => panic!("Protocal error: redirect without Location header")
                 }
             };
-            let mut newreq = Request::with_url(&from_str(newurl.as_slice()).unwrap());
+            let mut newreq = Request::with_url(&Url::parse(newurl.as_slice()).unwrap());
             for (k, vs) in req.headers.iter() {
                 for v in vs.iter() {
                     newreq.add_header(k.as_slice(), v.as_slice());
                 }
             }
-            println!("new req => {:?}", newreq);
+            // println!("new req => {:}", newreq);
             // TODO: fix possible malformed URL
             Some(newreq)
 
@@ -329,20 +331,20 @@ impl Handler for HTTPCookieProcessor {
 
 
 pub struct OpenDirector {
-    pub handlers: Vec<Box<Handler>>,
+    pub handlers: Vec<Box<Handler + Send>>,
     pub max_redirect: int,
 }
 
 impl OpenDirector {
     pub fn new() -> OpenDirector {
-        OpenDirector { handlers: vec!( box HTTPHandler::new() as Box<Handler>,
-                                       box HTTPCookieProcessor::new() as Box<Handler>,
-                                       box HTTPRedirectHandler::new() as Box<Handler>),
+        OpenDirector { handlers: vec!( box HTTPHandler::new() as Box<Handler + Send>,
+                                       box HTTPCookieProcessor::new() as Box<Handler + Send>,
+                                       box HTTPRedirectHandler::new() as Box<Handler + Send>),
                        max_redirect: 10,
         }
     }
 
-    pub fn add_handler(&mut self, h: Box<Handler>) {
+    pub fn add_handler(&mut self, h: Box<Handler + Send>) {
         self.handlers.push(h);
     }
 
@@ -352,16 +354,16 @@ impl OpenDirector {
         }
 
         self.handlers.sort_by(|h1,h2| h1.handle_order().cmp(&h2.handle_order()));
-        for hd in self.handlers.mut_iter() {
+        for hd in self.handlers.iter_mut() {
             hd.before_request(req);
         }
 
         let uri = req.uri.clone();
-        let port = uri.port.clone().and_then(|p| from_str(p.as_slice())).unwrap_or(HTTP_PORT);
-        let ips = get_host_addresses(uri.host.as_slice()).unwrap();
-        let addr = SocketAddr { ip: ips.get(0).clone(), port: port };
+        let port = uri.port().unwrap_or(HTTP_PORT);
+        let ips = get_host_addresses(uri.domain().unwrap()).unwrap();
+        let addr = SocketAddr { ip: ips[0].clone(), port: port };
 
-        let mut stream = TcpStream::connect(addr.ip.to_str().as_slice(), addr.port).unwrap();
+        let mut stream = TcpStream::connect(addr.ip.to_string().as_slice(), addr.port).unwrap();
 
         req.write_request(&mut stream);
 
@@ -372,11 +374,11 @@ impl OpenDirector {
             resp.eof = true;
         }
 
-        for hd in self.handlers.mut_iter() {
+        for hd in self.handlers.iter_mut() {
             hd.after_response(req, &mut resp);
         }
 
-        let newreq = self.handlers.mut_iter().fold(None, |ret, hd| {
+        let newreq = self.handlers.iter_mut().fold(None, |ret, hd| {
                 if ret.is_some() {
                     ret
                 } else {
@@ -442,7 +444,7 @@ impl CookieJar {
     }
 
     pub fn set_cookie_if_ok(&mut self, ck: Cookie, req: &Request) {
-        let domain = ck.clone().domain.unwrap_or(req.uri.clone().host);
+        let domain = ck.clone().domain.unwrap_or(req.uri.domain().unwrap().to_string());
         let path = ck.clone().path.unwrap_or("/".to_string());
         // TODO: add simple Cookie polocy here
         self.set_cookie(domain.as_slice(), path.as_slice(), ck);
@@ -451,8 +453,8 @@ impl CookieJar {
 
     pub fn cookies_for_request(&mut self, req: &Request) -> Vec<Cookie> {
         let uri = req.uri.clone();
-        let domain = uri.clone().host;
-        let path = uri.clone().path;
+        let domain = uri.domain().unwrap();
+        let path = uri.path().unwrap().connect("/");
         let m1 = &self.cookies;
         // TOOD: handle secure & httpOnly
         //let scheme = uri.scheme.clone();
@@ -460,11 +462,12 @@ impl CookieJar {
         let mut ret = Vec::new();
         // find domain
         for d in m1.keys() {
-            if (d.as_slice().starts_with(".") && domain.as_slice().ends_with(d.as_slice())) || d.eq(&domain) {
+            if (d.starts_with(".") && domain.ends_with(d.as_slice()))
+                || d.as_slice() == domain {
                 let m2 = m1.find(d).unwrap();
                 // find path
                 for p in m2.keys() {
-                    if path.as_slice().starts_with(p.as_slice()) {
+                    if path.starts_with(p.as_slice()) {
                         // find key
                         let m3 = m2.find(p).unwrap();
                         for ck in m3.values() {
@@ -504,41 +507,45 @@ impl<'a> Response<'a> {
         let mut stream = BufferedReader::with_capacity(1, s.clone());
 
         let line = stream.read_line().unwrap(); // status line
-        let segs = line.as_slice().splitn(' ', 2).collect::<Vec<&str>>();
+        let segs = line.splitn(2, ' ').collect::<Vec<&str>>();
 
-        let version = match *segs.get(0) {
+        let version = match segs[0] {
             "HTTP/1.1"                  => HTTP_1_1,
             "HTTP/1.0"                  => HTTP_1_0,
-            v if v.starts_with("HTTP/") => HTTP_1_0,
-            _                           => fail!("unsupported HTTP version")
+//            _ if v.starts_with("HTTP/") => HTTP_1_0,
+            _                           => panic!("unsupported HTTP version")
         };
-        let status = from_str::<int>(*segs.get(1)).unwrap();
-        let reason = segs.get(2).trim_right();
+        let status = from_str::<int>(segs[1]).unwrap();
+        let reason = segs[2].trim_right();
 
-        debug!("Got HTTP Response version = {:?} status = {:?} reason = {:?}",
+        debug!("Got HTTP Response version = {:} status = {:} reason = {:}",
                version, status, reason);
 
-        let mut headers = HashMap::new();
+        let mut headers: HashMap<String, Vec<String>> = HashMap::new();
         loop {
             let line = stream.read_line().unwrap();
-            let segs = line.as_slice().splitn(':', 1).collect::<Vec<&str>>();
+            let segs = line.splitn(1, ':').collect::<Vec<&str>>();
             if segs.len() == 2 {
-                let k = segs.get(0).trim();
-                let v = segs.get(1).trim();
-                headers.insert_or_update_with(k.to_ascii_lower(), vec!(v.into_string()),
-                                              |_k, ov| ov.push(v.into_string()));
+                let k = segs[0].trim();
+                let v = segs[1].trim();
+
+                if headers.contains_key(&k.to_string()) {
+                    headers.find_mut(&k.to_string()).map(|val| val.push(v.into_string()));
+                } else {
+                    headers.insert(k.to_ascii_lower(), vec!(v.into_string()));
+                };
             } else {
                 if ["\r\n".to_string(), "\n".to_string(), "".to_string()].contains(&line) {
                     break;
                 }
-                fail!("malformatted line");
+                panic!("malformatted line");
             }
         }
 
         let mut chunked = false;
         for (k, v) in headers.iter() {
-            if k.as_slice().eq_ignore_ascii_case("transfer-encoding") {
-                if v.get(0).as_slice().eq_ignore_ascii_case("chunked") {
+            if k.eq_ignore_ascii_case("transfer-encoding") {
+                if v[0].eq_ignore_ascii_case("chunked") {
                     chunked = true;
                 }
                 break;
@@ -549,13 +556,13 @@ impl<'a> Response<'a> {
         if !chunked {
             length = match headers.find(&"Content-Length".to_ascii_lower()) {
                 None => None,
-                Some(v) => from_str::<uint>(v.get(0).as_slice()),
+                Some(v) => from_str::<uint>(v[0].as_slice()),
             }
         }
 
         debug!("HTTP Response chunked={} length={}", chunked, length);
 
-        Response { version: version, status: status, reason: reason.into_string(),
+        Response { version: version, status: status, reason: reason.to_string(),
                    headers: headers,
                    chunked: chunked, chunked_left: None,
                    length: length, length_left: length.unwrap_or(0),
@@ -576,7 +583,7 @@ impl<'a> Response<'a> {
     fn read_next_chunk_size(&mut self) -> Option<uint> {
         let mut line = String::new();
         static MAXNUM_SIZE : uint = 16; // 16 hex digits
-        static HEX_CHARS : &'static [u8] = bytes!("0123456789abcdefABCDEF");
+        static HEX_CHARS : &'static [u8] = b"0123456789abcdefABCDEF";
         let mut is_in_chunk_extension = false;
         loop {
             match self.sock.read_byte() {
@@ -590,24 +597,24 @@ impl<'a> Response<'a> {
                     break;
                 }
                 Ok(_) if is_in_chunk_extension      => { continue; }
-                Ok(c) if HEX_CHARS.contains(&c) => { line.push_char(c as char); }
+                Ok(c) if HEX_CHARS.contains(&c) => { line.push(c as char); }
                 // `;`
                 Ok(0x3bu8)                          => { is_in_chunk_extension = true; }
                 Ok(c)                               => {
-                    fail!("malformat: reads={:?} next={:?}", line, c);
+                    panic!("malformat: reads={:} next={:}", line, c);
                 }
                 Err(_)                              => return None,
             }
         }
 
         if line.len() > MAXNUM_SIZE {
-            fail!("http chunk transfer encoding format: size line too long: {:?}", line);
+            panic!("http chunk transfer encoding format: size line too long: {:}", line);
         }
-        debug!("read_next_chunk_size, line={:?} value={:?}", line, from_str_radix::<uint>(line.as_slice(), 16));
+        debug!("read_next_chunk_size, line={:} value={:}", line, from_str_radix::<uint>(line.as_slice(), 16));
 
         match from_str_radix(line.as_slice(), 16) {
             Some(v) => Some(v),
-            None => fail!("wrong chunk size value: {:?}", line),
+            None => panic!("wrong chunk size value: {:}", line),
         }
     }
 }
@@ -648,7 +655,7 @@ impl<'a> Reader for Response<'a> {
                 let mut tbuf = Vec::from_elem(tbuf_len, 0u8);
                 match self.sock.read(tbuf.as_mut_slice()) {
                     Ok(nread) => {
-                        buf.move_from(tbuf.as_slice().into_owned(), 0, nread);
+                        buf.move_from(tbuf.to_vec(), 0, nread);
                         if left == nread {
                             // this chunk ends
                             // toss the CRLF at the end of the chunk

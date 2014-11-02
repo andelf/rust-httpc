@@ -45,14 +45,14 @@ pub struct GzipReader<R> {
 
 impl<R:Reader> GzipReader<R> {
     pub fn new(r: R) -> GzipReader<R> {
-        static cap : uint = 65536;
+        static CAP : uint = 65536;
         let mut strm = unsafe { mem::zeroed::<zlib::z_stream>() };
         let ret = unsafe {
             zlib::inflateInit2_(&mut strm, 47, zlib::zlibVersion(), mem::size_of::<zlib::z_stream>() as i32)
         };
         assert_eq!(ret, Z_OK);
-        let mut buf = Vec::with_capacity(cap);
-        unsafe { buf.set_len(cap); }
+        let mut buf = Vec::with_capacity(CAP);
+        unsafe { buf.set_len(CAP); }
         GzipReader { inner: r, zs: strm, buf: buf, buf_len: 0, eof: false }
     }
 }
@@ -89,7 +89,7 @@ impl<R:Reader> Reader for GzipReader<R> {
         let ret = unsafe { zlib::inflate(strm, Z_NO_FLUSH) };
         let writen : uint = out_len - strm.avail_out as uint;
 
-        if ret != Z_OK && ret != Z_STREAM_END { fail!("bad ret code: {}", ret) }
+        if ret != Z_OK && ret != Z_STREAM_END { panic!("bad ret code: {}", ret) }
 
         if strm.avail_in != 0 { // out buf too small
             // strm.next_in will move to current ptr
@@ -108,8 +108,8 @@ impl<R:Reader> Reader for GzipReader<R> {
 }
 
 // duplicated code :(
-pub struct GzipReaderWrapper<'a> {
-    inner: &'a mut Buffer,
+pub struct GzipReaderWrapper<R> {
+    inner: R,
     zs: zlib::z_stream,
     buf: Vec<u8>,
     buf_len: uint,
@@ -117,22 +117,22 @@ pub struct GzipReaderWrapper<'a> {
 }
 
 
-impl<'a> GzipReaderWrapper<'a> {
-    pub fn new(r: &'a mut Buffer) -> GzipReaderWrapper {
-        static cap : uint = 65536;
+impl<R: Reader> GzipReaderWrapper<R> {
+    pub fn new(r: R) -> GzipReaderWrapper<R> {
+        static CAP : uint = 65536;
         let mut strm = unsafe { mem::zeroed::<zlib::z_stream>() };
         let ret = unsafe {
             zlib::inflateInit2_(&mut strm, 47, zlib::zlibVersion(), mem::size_of::<zlib::z_stream>() as i32)
         };
         assert_eq!(ret, Z_OK);
-        let mut buf = Vec::with_capacity(cap);
-        unsafe { buf.set_len(cap); }
+        let mut buf = Vec::with_capacity(CAP);
+        unsafe { buf.set_len(CAP); }
         GzipReaderWrapper { inner: r, // &mut r as &'a mut Reader,
                             zs: strm, buf: buf, buf_len: 0, eof: false }
     }
 }
 
-impl<'a> Reader for GzipReaderWrapper<'a> {
+impl<R: Reader> Reader for GzipReaderWrapper<R> {
      fn read(&mut self, buf: &mut [u8]) -> IoResult<uint> {
         let out_len = buf.len();
         let mut tbuf = Vec::from_elem(out_len, 0u8);
@@ -164,7 +164,7 @@ impl<'a> Reader for GzipReaderWrapper<'a> {
         let ret = unsafe { zlib::inflate(strm, Z_NO_FLUSH) };
         let writen : uint = out_len - strm.avail_out as uint;
 
-        if ret != Z_OK && ret != Z_STREAM_END { fail!("bad ret code: {}", ret) }
+        if ret != Z_OK && ret != Z_STREAM_END { panic!("bad ret code: {}", ret) }
 
         if strm.avail_in != 0 { // out buf too small
             // strm.next_in will move to current ptr
@@ -198,7 +198,7 @@ mod test {
                                 0x02, 0x00, 0x55, 0x0b, 0xfc, 0xa0, 0x05, 0x00, 0x00, 0x00];
         let src = io::BufReader::new(gz_file_content);
         let mut dst = GzipReader::new(src);
-        assert_eq!(dst.read_to_str().unwrap(), "fuck\n".to_string());
+        assert_eq!(dst.read_to_string().unwrap(), "fuck\n".to_string());
     }
 
     #[test]
@@ -208,7 +208,7 @@ mod test {
                                 0x02, 0x00, 0x55, 0x0b, 0xfc, 0xa0, 0x05, 0x00, 0x00, 0x00];
         let src = io::BufReader::new(gz_file_content);
         let mut dst = GzipReader::new(src);
-        assert_eq!(dst.read_to_str().unwrap(), "fuck\n".to_string());
-        assert_eq!(dst.read_to_str().unwrap(), "".to_string());
+        assert_eq!(dst.read_to_string().unwrap(), "fuck\n".to_string());
+        assert_eq!(dst.read_to_string().unwrap(), "".to_string());
     }
 }

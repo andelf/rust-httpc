@@ -4,7 +4,7 @@ use std::from_str::FromStr;
 use std::fmt::{Show, Formatter, Result};
 use time::{Tm, now_utc, strptime, strftime};
 
-use std::ascii::StrAsciiExt;
+use std::ascii::AsciiExt;
 
 // TODO: how to express not provided in header line
 // TODO: handle port
@@ -73,17 +73,17 @@ impl Show for Cookie {
 impl FromStr for Cookie {
     fn from_str(s: &str) -> Option<Cookie> {
         let mut segs = s.split(';');
-        let kv = segs.next().unwrap().splitn('=', 1).collect::<Vec<&str>>();
-        let name = kv.get(0).trim();
-        let value = kv.get(1).trim();
+        let kv = segs.next().unwrap().splitn(1, '=').collect::<Vec<&str>>();
+        let name = kv[0].trim();
+        let value = kv[1].trim();
         let mut ck = Cookie::new_with_name_value(name, value);
         for seg in segs.collect::<Vec<&str>>().iter() {
             if seg.find('=').is_some() {
-                let kv = seg.trim().splitn('=', 1).collect::<Vec<&str>>();
-                match kv.get(0).to_ascii_lower().as_slice() {
+                let kv = seg.trim().splitn(1, '=').collect::<Vec<&str>>();
+                match kv[0].to_ascii_lower().as_slice() {
                     // TODO: GMT vs UTC
                     "expires" => {
-                        ck.expires = match strptime(kv.get(1).as_slice(), "%a, %d-%b-%y %H:%M:%S %Z") {
+                        ck.expires = match strptime(kv[1].as_slice(), "%a, %d-%b-%y %H:%M:%S %Z") {
                             Ok(tm) => { // 2-digits year format is buggy
                                 let mut tm = tm;
                                 if tm.tm_year < 1950 {
@@ -91,7 +91,7 @@ impl FromStr for Cookie {
                                 }
                                 Some(tm)
                             }
-                            Err(_) => match strptime(kv.get(1).as_slice(), "%a, %d-%b-%Y %H:%M:%S %Z") {
+                            Err(_) => match strptime(kv[1].as_slice(), "%a, %d-%b-%Y %H:%M:%S %Z") {
                                 Err(_) => None,
                                 Ok(tm) => Some(tm)
                             },
@@ -100,22 +100,22 @@ impl FromStr for Cookie {
                     }
                     // max-age may override expires with a bigger val
                     "max-age" => {
-                        let age : i64 = from_str(kv.get(1).as_slice()).unwrap();
+                        let age : i64 = from_str(kv[1].as_slice()).unwrap();
                         let mut ts = time::get_time();
                         ts.sec += age;
                         let tm = time::at_utc(ts);
                         ck.expires = Some(tm)
                     }
-                    "path"    => { ck.path = Some(kv.get(1).into_string()) }
-                    "domain"  => { ck.domain = Some(kv.get(1).into_string()) }
+                    "path"    => { ck.path = Some(kv[1].into_string()) }
+                    "domain"  => { ck.domain = Some(kv[1].into_string()) }
                     "version" => (),
-                    _ => { println!("unknown kv => {:?}", kv); }
+                    _ => { println!("unknown kv => {:}", kv); }
                 }
             } else {
                 match seg.trim().to_ascii_lower().as_slice() {
                     "secure" => { ck.secure = true }
                     "httponly" => { ck.http_only = true }
-                    _ => { println!("bad http cookie seg {:?}", seg) }
+                    _ => { println!("bad http cookie seg {:}", seg) }
                 }
             }
         }

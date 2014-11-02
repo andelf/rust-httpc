@@ -10,6 +10,7 @@ pub type alloc_func =
                               -> *const c_void>;
 pub type free_func =
     ::std::option::Option<extern "C" fn(arg1: *const c_void, arg2: *const c_void)>;
+#[repr(C)]
 pub struct Struct_z_stream_s {
     pub next_in: *mut c_char,
     pub avail_in: c_uint,
@@ -28,6 +29,7 @@ pub struct Struct_z_stream_s {
 }
 pub type z_stream = Struct_z_stream_s;
 pub type z_streamp = *mut z_stream;
+#[repr(C)]
 pub struct Struct_gz_header_s {
     pub text: c_int,
     pub time: c_ulong,
@@ -54,11 +56,13 @@ pub type out_func =
                               (arg1: *mut c_void, arg2: *mut c_uchar,
                                arg3: c_uint) -> c_int>;
 pub type gzFile = *mut Struct_gzFile_s;
+#[repr(C)]
 pub struct Struct_gzFile_s {
     pub have: c_uint,
     pub next: *mut c_uchar,
     pub pos: off_t,
 }
+#[repr(C)]
 pub struct Struct_internal_state {
     pub dummy: c_int,
 }
