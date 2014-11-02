@@ -1,7 +1,6 @@
 # rust-httpc
 
 [![Build Status](https://travis-ci.org/andelf/rust-httpc.svg?branch=master)](https://travis-ci.org/andelf/rust-httpc)
-[![Build Status](https://drone.io/github.com/andelf/rust-httpc/status.png)](https://drone.io/github.com/andelf/rust-httpc/latest)
 
 ## An http client lib.
 
