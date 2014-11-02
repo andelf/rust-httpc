@@ -1,15 +1,10 @@
-before_install:
-  - wget http://static.rust-lang.org/dist/rust-nightly-x86_64-unknown-linux-gnu.tar.gz
-  - tar xf rust-nightly-x86_64-unknown-linux-gnu.tar.gz
-install:
-  - sudo ./rust-nightly-x86_64-unknown-linux-gnu/install.sh
+language: rust
+os:
+    - linux
+env:
+  global:
+    - LD_LIBRARY_PATH: /usr/local/lib
 script:
-  - rustc src/httpc/lib.rs
-  - rustc --test src/httpc/lib.rs
-  - ./httpc
-notifications:
-  email:
-    recipients:
-      - fledna@foxmail.com
-    on_success: change
-    on_failure: always
+  - cargo build -v
+  - cargo test -v
+  - cargo doc -v
