@@ -361,13 +361,11 @@ impl OpenDirector {
         let uri = req.uri.clone();
         let port = uri.port().unwrap_or(HTTP_PORT);
         let ips = get_host_addresses(uri.domain().unwrap()).unwrap();
-        println!("fuck")
         let addr = SocketAddr { ip: ips[0].clone(), port: port };
 
         let mut stream = TcpStream::connect(addr.ip.to_string().as_slice(), addr.port).unwrap();
 
         req.write_request(&mut stream);
-        println!("fuck")
         let mut resp = Response::with_stream(&stream);
         // FIXME: this is ugly
         if req.method == HEAD {
