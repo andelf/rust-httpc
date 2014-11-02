@@ -1,5 +1,4 @@
 #![feature(globs)]
-extern crate debug;
 extern crate httpc;
 
 use httpc::*;
@@ -8,13 +7,13 @@ use httpc::*;
 fn dump_result(req: &Request, resp: &Response) {
     println!("\n======================= request result =======================");
     for (k, vs) in req.headers.iter() {
-        println!("H {:?} => {:}", k, vs)
+        println!("H {:} => {:}", k, vs)
     }
 
     println!("======================= response result =======================");
     println!("status = {} reason = {}", resp.status, resp.reason);
     for (k, vs) in resp.headers.iter() {
-        println!("H {:?} => {:}", k, vs)
+        println!("H {:} => {:}", k, vs)
     }
 }
 
@@ -33,13 +32,13 @@ fn main() {
     // dump_result(&req, &resp);
 
 
-    let url : Url = from_str("http://t.cn/8siKe6l").unwrap();
+    let url = Url::parse("http://t.cn/8siKe6l").unwrap();
     let mut req = Request::with_url(&url);
     let mut resp = opener.open(&mut req).unwrap();
 
     dump_result(&req, &resp);
 
-    println!("got => {}", resp.read_to_str().unwrap());
+    println!("got => {}", resp.read_to_string().unwrap());
 
     println!("ends");
 }

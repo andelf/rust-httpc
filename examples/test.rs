@@ -2,8 +2,7 @@
 #![allow(unused_mut)]
 #![feature(phase)]
 
-extern crate debug;
-#[phase(syntax, link)] extern crate log;
+#[phase(plugin, link)] extern crate log;
 extern crate httpc;
 extern crate test;
 use test::Bencher;
@@ -14,13 +13,13 @@ use httpc::compress::*;
 fn dump_result(req: &Request, resp: &Response) {
     println!("\n======================= request result =======================");
     for (k, vs) in req.headers.iter() {
-        println!("H {:?} => {}", k, vs)
+        println!("H {:} => {}", k, vs)
     }
 
     println!("======================= response result =======================");
     println!("status = {} reason = {}", resp.status, resp.reason);
     for (k, vs) in resp.headers.iter() {
-        println!("H {:?} => {}", k, vs)
+        println!("H {:} => {}", k, vs)
     }
 }
 
@@ -123,14 +122,14 @@ fn test_cookie_parse() {
         assert!(ck_opt.is_some());
         let ck = ck_opt.unwrap();
 
-        //println!("got cookie => {:?}", ck);
-        info!("expired => {:?}", ck.is_expired());
-        println!("header req => {:?}", ck.to_header());
-        //println!("header_str => {:?}", ck.to_str());
+        //println!("got cookie => {:}", ck);
+        info!("expired => {:}", ck.is_expired());
+        println!("header req => {:}", ck.to_header());
+        //println!("header_str => {:}", ck.to_str());
         cj.set_cookie_if_ok(ck, &req);
     }
     assert!(cj.cookies_for_request(&req).len() > 0);
-    println!("CJ => {:?}", cj);
+    println!("CJ => {:}", cj);
     assert_eq!(resp.status, 200);
 }
 
@@ -140,7 +139,7 @@ fn test_http_post_request() {
     let mut req = Request::with_url(&url);
 
     req.method = POST;
-    req.add_body(bytes!("kind=simple&type=title&word=erlang&match=mh&recordtype=01&library_id=all&x=40&y=10"));
+    req.add_body(b"kind=simple&type=title&word=erlang&match=mh&recordtype=01&library_id=all&x=40&y=10");
 
     let mut opener = build_opener();
     let mut resp = opener.open(&mut req).unwrap();
@@ -155,7 +154,7 @@ fn test_http_post_request() {
             println!("DEBUG read bytes=> {}", content.len());
         }
         Err(e) => {
-            println!("! read error: {:?}", e);
+            println!("! read error: {:}", e);
         }
     }
     assert_eq!(resp.status, 200);
@@ -183,9 +182,9 @@ fn test_http_head_request() {
     let mut opener = build_opener();
     let mut resp = opener.open(&mut req).unwrap();
 
-    println!("resp => {:?}", resp);
+    println!("resp => {:}", resp);
 
-    println!("resp.read_to_end() => {:?}", resp.read_to_end());
+    println!("resp.read_to_end() => {:}", resp.read_to_end());
     assert_eq!(resp.read_to_end().unwrap().len(), 0);
     assert_eq!(resp.status, 200);
 }
@@ -221,4 +220,8 @@ fn test_http_redirect_response_yahoo() {
 
     // assert_eq!(resp.status, 301);
     assert!(resp.read_to_end().is_ok());
+}
+
+fn main() {
+
 }
