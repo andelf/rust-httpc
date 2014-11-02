@@ -12,3 +12,13 @@ path       = "src/httpc/lib.rs"
 [dependencies.url]
 
 git = "https://github.com/servo/rust-url.git"
+
+[[bin]]
+
+name = "main"
+path = "examples/main.rs"
+
+[[bin]]
+
+name = "youdao_fanyi"
+path = "examples/youdao_fanyi.rs"
