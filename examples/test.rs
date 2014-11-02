@@ -25,7 +25,7 @@ fn dump_result(req: &Request, resp: &Response) {
 
 #[bench]
 fn bench_http_request_get_baidu(b: &mut Bencher) {
-    let url : Url = from_str("http://www.baidu.com").unwrap();
+    let url : Url = Url::parse("http://www.baidu.com").unwrap();
     let mut req = Request::with_url(&url);
 
     let mut opener = build_opener();
@@ -39,7 +39,7 @@ fn bench_http_request_get_baidu(b: &mut Bencher) {
 
 #[test]
 fn test_http_response_reader_eof() {
-    let url : Url = from_str("http://www.baidu.com").unwrap();
+    let url : Url = Url::parse("http://www.baidu.com").unwrap();
     let mut req = Request::with_url(&url);
     let mut opener = build_opener();
     let mut resp = opener.open(&mut req).unwrap();
@@ -50,7 +50,7 @@ fn test_http_response_reader_eof() {
 
 #[test]
 fn test_cookie_processor() {
-    let url : Url = from_str("http://www.baidu.com").unwrap();
+    let url : Url = Url::parse("http://www.baidu.com").unwrap();
     let mut req = Request::with_url(&url);
 
     let mut opener = build_opener();
@@ -59,7 +59,7 @@ fn test_cookie_processor() {
     assert!(resp.read_to_end().is_ok());
     assert!(resp.get_headers("set-cookie").len() > 0);
 
-    let url : Url = from_str("http://tieba.baidu.com/").unwrap();
+    let url : Url = Url::parse("http://tieba.baidu.com/").unwrap();
     let mut req = Request::with_url(&url);
     let mut resp = opener.open(&mut req).unwrap();
 
@@ -72,18 +72,18 @@ fn test_cookie_processor() {
 
 #[test]
 fn test_content_encoding_gzip() {
-    // let url = from_str("http://www.vervestudios.co/projects/compression-tests/static/js/test-libs/jquery.min.js?d=1394076086888&format=gzip").unwrap();
-    let url = from_str("http://www.baidu.com/").unwrap();
+    // let url = Url::parse("http://www.vervestudios.co/projects/compression-tests/static/js/test-libs/jquery.min.js?d=1394076086888&format=gzip").unwrap();
+    let url = Url::parse("http://www.baidu.com/").unwrap();
     let mut req = Request::with_url(&url);
     req.add_header("Accept-Encoding", "gzip,deflate");
     let mut opener = build_opener();
     let resp = opener.open(&mut req).unwrap();
 
-    assert!(resp.get_headers("Content-Encoding").get(0).as_slice().contains("gzip"));
-
     dump_result(&req, &resp);
+    assert!(resp.get_headers("Content-Encoding")[0].as_slice().contains("gzip"));
+
     let mut r = GzipReader::new(resp);
-    let ret = r.read_to_str();
+    let ret = r.read_to_string();
     assert!(ret.unwrap().as_slice().contains("</html>")); // find tail
 }
 
@@ -91,7 +91,7 @@ fn test_content_encoding_gzip() {
 
 #[test]
 fn test_content_encoding_deflate_zlib() {
-    let url = from_str("http://www.vervestudios.co/projects/compression-tests/static/js/test-libs/jquery.min.js?d=1394076086888&format=zlib").unwrap();
+    let url = Url::parse("http://www.vervestudios.co/projects/compression-tests/static/js/test-libs/jquery.min.js?d=1394076086888&format=zlib").unwrap();
     let mut req = Request::with_url(&url);
     req.add_header("Accept-Encoding", "gzip,deflate");
     let mut opener = build_opener();
@@ -109,7 +109,7 @@ fn test_content_encoding_deflate_zlib() {
 
 #[test]
 fn test_cookie_parse() {
-    let url = from_str("http://www.baidu.com/").unwrap();
+    let url = Url::parse("http://www.baidu.com/").unwrap();
     let mut req = Request::with_url(&url);
 
     let mut opener = build_opener();
@@ -129,13 +129,13 @@ fn test_cookie_parse() {
         cj.set_cookie_if_ok(ck, &req);
     }
     assert!(cj.cookies_for_request(&req).len() > 0);
-    println!("CJ => {:}", cj);
+    // println!("CJ => {:}", cj);
     assert_eq!(resp.status, 200);
 }
 
 #[test]
 fn test_http_post_request() {
-    let url = from_str("http://202.118.8.2:8080/book/queryOut.jsp").unwrap();
+    let url = Url::parse("http://202.118.8.2:8080/book/queryOut.jsp").unwrap();
     let mut req = Request::with_url(&url);
 
     req.method = POST;
@@ -162,7 +162,7 @@ fn test_http_post_request() {
 
 #[test]
 fn test_http_options_request() {
-    let url = from_str("http://www.w3.org").unwrap();
+    let url = Url::parse("http://www.w3.org").unwrap();
     let mut req = Request::with_url(&url);
     req.method = OPTIONS;
 
@@ -175,14 +175,14 @@ fn test_http_options_request() {
 
 #[test]
 fn test_http_head_request() {
-    let url = from_str("http://www.w3.org").unwrap();
+    let url = Url::parse("http://www.w3.org").unwrap();
     let mut req = Request::with_url(&url);
     req.method = HEAD;
 
     let mut opener = build_opener();
     let mut resp = opener.open(&mut req).unwrap();
 
-    println!("resp => {:}", resp);
+    // println!("resp => {:}", resp);
 
     println!("resp.read_to_end() => {:}", resp.read_to_end());
     assert_eq!(resp.read_to_end().unwrap().len(), 0);
@@ -191,7 +191,7 @@ fn test_http_head_request() {
 
 #[test]
 fn test_weather_sug() {
-    let url : Url = from_str("http://toy1.weather.com.cn/search?cityname=yulin&_=2").unwrap();
+    let url : Url = Url::parse("http://toy1.weather.com.cn/search?cityname=yulin&_=2").unwrap();
 
     let mut req = Request::with_url(&url);
     req.set_header("Referer", "http://www.weather.com.cn/");
@@ -199,7 +199,7 @@ fn test_weather_sug() {
     let mut opener = build_opener();
     let mut resp = opener.open(&mut req).unwrap();
 
-    let content = match resp.read_to_str() {
+    let content = match resp.read_to_string() {
         Ok(content) => {
             content
         }
@@ -212,7 +212,7 @@ fn test_weather_sug() {
 
 #[test]
 fn test_http_redirect_response_yahoo() {
-    let url = from_str("http://www.yahoo.com.cn").unwrap();
+    let url = Url::parse("http://www.yahoo.com.cn").unwrap();
     let mut req = Request::with_url(&url);
 
     let mut opener = build_opener();

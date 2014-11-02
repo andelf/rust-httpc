@@ -44,7 +44,7 @@ pub use cookie::Cookie;
 
 mod zlib;
 
-static USER_AGENT : &'static str = "Rust-http-helper/0.1dev";
+static USER_AGENT : &'static str = "Rust-httpc/0.1dev";
 static HTTP_PORT : u16 = 80;
 
 #[deriving(PartialEq, Show)]
@@ -108,9 +108,13 @@ impl<'a> Request<'a> {
     // add new header value to exist value
     pub fn add_header(&mut self, key: &str, value: &str) {
         if self.headers.contains_key(&key.to_string()) {
+            println!("has key")
             self.headers.find_mut(&key.to_string()).unwrap().push(value.into_string());
         } else {
+            println!("not has key => {}", key)
+
             self.headers.insert(key.to_ascii_lower(), vec!(value.into_string()));
+            println!("not has key => {}", self.headers)
         }
     }
 
@@ -205,17 +209,26 @@ impl Handler for HTTPHandler {
     fn before_request(&mut self, req: &mut Request) {
         let uri = req.uri.clone();
         let host = uri.port().map_or(uri.domain().unwrap().to_string(), |p| format!("{}:{}", uri.domain().unwrap(), p));
-        req.headers.insert("host".to_string(), vec!(host.to_string()));
-        req.headers.insert("user-agent".to_string(), vec!(USER_AGENT.into_string()));
-
+        if !req.headers.contains_key(&"host".to_string()) {
+            req.headers.insert("host".to_string(), vec!(host.to_string()));
+        }
+        if !req.headers.contains_key(&"user-agent".to_string()) {
+            req.headers.insert("user-agent".to_string(), vec!(USER_AGENT.into_string()));
+        }
         // partly support x-deflate.
-        req.headers.insert("accept-encoding".to_string(), vec!("identity".to_string()));
-        req.headers.insert("connection".to_string(), vec!("close".to_string()));
+        if !req.headers.contains_key(&"accept-encoding".to_string()) {
+            req.headers.insert("accept-encoding".to_string(), vec!("identity".to_string()));
+        }
+        if !req.headers.contains_key(&"connection".to_string()) {
+            req.headers.insert("connection".to_string(), vec!("close".to_string()));
+        }
 
         match req.method {
             POST | PUT => {
                 req.headers.insert("content-length".to_string(), vec!(req.content.len().to_string()));
-                req.headers.insert("content-type".to_string(), vec!("application/x-www-form-urlencoded".to_string()));
+                if !req.headers.contains_key(&"content-type".to_string()) {
+                    req.headers.insert("content-type".to_string(), vec!("application/x-www-form-urlencoded".to_string()));
+                }
             },
             _      => (),
         }
@@ -453,7 +466,7 @@ impl CookieJar {
     pub fn cookies_for_request(&mut self, req: &Request) -> Vec<Cookie> {
         let uri = req.uri.clone();
         let domain = uri.domain().unwrap();
-        let path = uri.path().unwrap().connect("/");
+        let path = uri.serialize_path().unwrap_or("/".to_string());
         let m1 = &self.cookies;
         // TOOD: handle secure & httpOnly
         //let scheme = uri.scheme.clone();
@@ -461,6 +474,7 @@ impl CookieJar {
         let mut ret = Vec::new();
         // find domain
         for d in m1.keys() {
+            println!("keys ====> {}", d)
             if (d.starts_with(".") && domain.ends_with(d.as_slice()))
                 || d.as_slice() == domain {
                 let m2 = m1.find(d).unwrap();

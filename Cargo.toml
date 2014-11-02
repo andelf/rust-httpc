@@ -22,3 +22,8 @@ path = "examples/main.rs"
 
 name = "youdao_fanyi"
 path = "examples/youdao_fanyi.rs"
+
+[[bin]]
+
+name = "test"
+path = "examples/test.rs"
