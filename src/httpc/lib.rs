@@ -205,20 +205,19 @@ impl Handler for HTTPHandler {
     fn before_request(&mut self, req: &mut Request) {
         let uri = req.uri.clone();
         let host = uri.port().map_or(uri.domain().unwrap().to_string(), |p| format!("{}:{}", uri.domain().unwrap(), p));
-        req.headers["host".to_string()] = vec!(host.to_string());
-
-        req.headers["user-agent".to_string()] = vec!(USER_AGENT.into_string());
+        req.headers.insert("host".to_string(), vec!(host.to_string()));
+        req.headers.insert("user-agent".to_string(), vec!(USER_AGENT.into_string()));
 
         // partly support x-deflate.
-        req.headers["accept-encoding".to_string()] = vec!("identity".to_string());
-        req.headers["connection".to_string()] = vec!("close".to_string());
+        req.headers.insert("accept-encoding".to_string(), vec!("identity".to_string()));
+        req.headers.insert("connection".to_string(), vec!("close".to_string()));
 
         match req.method {
             POST | PUT => {
-                req.headers["content-length".to_string()] = vec!(req.content.len().to_string());
-                req.headers["content-type".to_string()] = vec!["application/x-www-form-urlencoded".to_string()];
+                req.headers.insert("content-length".to_string(), vec!(req.content.len().to_string()));
+                req.headers.insert("content-type".to_string(), vec!("application/x-www-form-urlencoded".to_string()));
             },
-            _          => (),
+            _      => (),
         }
     }
 
@@ -353,6 +352,7 @@ impl OpenDirector {
             return None
         }
 
+
         self.handlers.sort_by(|h1,h2| h1.handle_order().cmp(&h2.handle_order()));
         for hd in self.handlers.iter_mut() {
             hd.before_request(req);
@@ -361,12 +361,13 @@ impl OpenDirector {
         let uri = req.uri.clone();
         let port = uri.port().unwrap_or(HTTP_PORT);
         let ips = get_host_addresses(uri.domain().unwrap()).unwrap();
+        println!("fuck")
         let addr = SocketAddr { ip: ips[0].clone(), port: port };
 
         let mut stream = TcpStream::connect(addr.ip.to_string().as_slice(), addr.port).unwrap();
 
         req.write_request(&mut stream);
-
+        println!("fuck")
         let mut resp = Response::with_stream(&stream);
         // FIXME: this is ugly
         if req.method == HEAD {
