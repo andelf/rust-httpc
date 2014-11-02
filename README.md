@@ -34,17 +34,16 @@
 
 ### build lib
 
-    $ rustc src/httpc/lib.rs
+    $ cargo build
 
 ### build test & run test
 
-    $ rustc --test src/httpc/lib.rs
-    $ ./httpc
+    $ cargo test
 
 ### build sample program & run
 
-    $ rustc -L. src/examples/{main,test,...}.rs
-    $ ./main
+    $ cargo run --name main
+    $ cargo run --name youdao_fanyi word
 
 ## Simple Usage
 
@@ -57,12 +56,12 @@ use httpc::*;
 fn dump_result(req: &Request, resp: &Response) {
     println!("\n======================= request result =======================");
     for (k, vs) in req.headers.iter() {
-        println!("H {:?} => {:?}", k, vs)
+        println!("H {:} => {:}", k, vs)
     }
     println!("======================= response result =======================");
     println!("status = {} reason = {}", resp.status, resp.reason);
     for (k, vs) in resp.headers.iter() {
-        println!("H {:?} => {:?}", k, vs)
+        println!("H {:} => {:}", k, vs)
     }
 }
 
@@ -80,18 +79,18 @@ fn main() {
 
     dump_result(&req, &resp);
 
-    println!("got cookies = {:?}", resp.get_headers("set-cookie"));
+    println!("got cookies = {:}", resp.get_headers("set-cookie"));
     match resp.get_headers("Content-Encoding").head() {
         Some(&~"gzip") => {
             let mut gzreader = compress::GzipReader::new(resp);
-            println!("unzip => {:?}",  gzreader.read_to_str());
+            println!("unzip => {:}",  gzreader.read_to_str());
         }
         Some(&~"deflate") => {
             let mut gzreader = compress::GzipReader::new(resp);
-            println!("unzip => {:?}",  gzreader.read_to_str());
+            println!("unzip => {:}",  gzreader.read_to_str());
         }
         None => {
-            println!("content => {:?}", resp.read_to_str());
+            println!("content => {:}", resp.read_to_str());
         }
         _ => unreachable!()
     }
