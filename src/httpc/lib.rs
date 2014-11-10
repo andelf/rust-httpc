@@ -376,7 +376,7 @@ impl OpenDirector {
         let ips = get_host_addresses(uri.domain().unwrap()).unwrap();
         let addr = SocketAddr { ip: ips[0].clone(), port: port };
 
-        let mut stream = TcpStream::connect(addr.ip.to_string().as_slice(), addr.port).unwrap();
+        let mut stream = TcpStream::connect(addr).unwrap();
 
         req.write_request(&mut stream);
         let mut resp = Response::with_stream(&stream);
