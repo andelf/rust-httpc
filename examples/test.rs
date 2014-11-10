@@ -38,6 +38,24 @@ fn bench_http_request_get_baidu(b: &mut Bencher) {
 }
 
 #[test]
+fn test_http_get() {
+    let url : Url = Url::parse("http://httpbin.org/get?test=250").unwrap();
+    let mut req = Request::with_url(&url);
+    let mut opener = build_opener();
+    let mut resp = opener.open(&mut req).unwrap();
+    assert!(resp.read_to_string().unwrap().as_slice().contains("test=250"));
+}
+
+#[test]
+fn test_http_user_agent() {
+    let url : Url = Url::parse("http://httpbin.org/user-agent").unwrap();
+    let mut req = Request::with_url(&url);
+    let mut opener = build_opener();
+    let mut resp = opener.open(&mut req).unwrap();
+    assert!(resp.read_to_string().unwrap().as_slice().contains("Rust-httpc"));
+}
+
+#[test]
 fn test_http_response_reader_eof() {
     let url : Url = Url::parse("http://www.baidu.com").unwrap();
     let mut req = Request::with_url(&url);
@@ -135,7 +153,7 @@ fn test_cookie_parse() {
 
 #[test]
 fn test_http_post_request() {
-    let url = Url::parse("http://202.118.8.2:8080/book/queryOut.jsp").unwrap();
+    let url = Url::parse("http://httpbin.org/post").unwrap();
     let mut req = Request::with_url(&url);
 
     req.method = POST;
