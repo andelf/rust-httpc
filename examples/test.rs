@@ -167,7 +167,7 @@ fn test_http_post_request() {
     match resp.read_to_end() {
         Ok(content) => {
             for c in content.iter() {
-                print!("{:c}", *c as char);
+                print!("{:}", *c as char);
             }
             println!("DEBUG read bytes=> {}", content.len());
         }

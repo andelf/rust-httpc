@@ -1,9 +1,8 @@
 extern crate time;
 
-use std::from_str::FromStr;
+use std::str::FromStr;
 use std::fmt::{Show, Formatter, Result};
 use time::{Tm, now_utc, strptime, strftime};
-
 use std::ascii::AsciiExt;
 
 // TODO: how to express not provided in header line

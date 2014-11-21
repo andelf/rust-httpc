@@ -68,8 +68,8 @@ pub enum HttpVersion {
 impl Show for HttpVersion {
     fn fmt(&self, f: &mut Formatter) -> Result {
         match *self {
-            HTTP_1_1 => write!(f, "HTTP/1.1"),
-            HTTP_1_0 => write!(f, "HTTP/1.0"),
+            HttpVersion::HTTP_1_1 => write!(f, "HTTP/1.1"),
+            HttpVersion::HTTP_1_0 => write!(f, "HTTP/1.0"),
         }
     }
 }
@@ -90,7 +90,7 @@ impl<'a> Request<'a> {
         // if uri.path == "".to_string() {
         //     uri.path = "/".to_string();
         // }
-        Request { version: HTTP_1_1, uri: uri, method: GET,
+        Request { version: HttpVersion::HTTP_1_1, uri: uri, method: HttpMethod::GET,
                   headers: HashMap::new(),
                   content: Vec::new() }
     }
@@ -161,7 +161,7 @@ impl<'a> Request<'a> {
         w.write_str("\r\n");
 
         match self.method {
-            POST | PUT => w.write(self.content.as_slice()),
+            HttpMethod::POST | HttpMethod::PUT => w.write(self.content.as_slice()),
             _ => Ok(())
         };
 
@@ -224,7 +224,7 @@ impl Handler for HTTPHandler {
         }
 
         match req.method {
-            POST | PUT => {
+            HttpMethod::POST | HttpMethod::PUT => {
                 req.headers.insert("content-length".to_string(), vec!(req.content.len().to_string()));
                 if !req.headers.contains_key(&"content-type".to_string()) {
                     req.headers.insert("content-type".to_string(), vec!("application/x-www-form-urlencoded".to_string()));
@@ -281,8 +281,8 @@ impl Handler for HTTPRedirectHandler {
     }
 
     fn redirect_request(&mut self, req: &Request, resp: &Response) -> Option<Request> {
-        if [301, 302, 303, 307].contains(&resp.status) && ( req.method == GET || req.method == HEAD ) ||
-            [301, 302, 303].contains(&resp.status) && req.method == POST {
+        if [301, 302, 303, 307].contains(&resp.status) && ( req.method == HttpMethod::GET || req.method == HttpMethod::HEAD ) ||
+            [301, 302, 303].contains(&resp.status) && req.method == HttpMethod::POST {
             println!("need redirect!");
             let newurl = match resp.get_headers("location").last() {
                 Some(u) => u.clone(),
@@ -381,7 +381,7 @@ impl OpenDirector {
         req.write_request(&mut stream);
         let mut resp = Response::with_stream(&stream);
         // FIXME: this is ugly
-        if req.method == HEAD {
+        if req.method == HttpMethod::HEAD {
             // HEAD req has content-length response header, but no payload
             resp.eof = true;
         }
@@ -523,8 +523,8 @@ impl<'a> Response<'a> {
         let segs = line.splitn(2, ' ').collect::<Vec<&str>>();
 
         let version = match segs[0] {
-            "HTTP/1.1"                  => HTTP_1_1,
-            "HTTP/1.0"                  => HTTP_1_0,
+            "HTTP/1.1"                  => HttpVersion::HTTP_1_1,
+            "HTTP/1.0"                  => HttpVersion::HTTP_1_0,
 //            _ if v.starts_with("HTTP/") => HTTP_1_0,
             _                           => panic!("unsupported HTTP version")
         };
